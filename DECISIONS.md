@@ -104,3 +104,74 @@ reversibility, date, and affected files.
 - **Reversibility:** Medium.
 - **Date:** 2026-08-05.
 - **Affected:** `src-tauri/src/lib.rs`.
+
+## D008 — Recovery code: 160 bits, base32 + checksum (Phase 1)
+- **Decision:** Recovery codes are 20 random bytes (160 bits) from the CSPRNG,
+  encoded as RFC 4648 base32 upper-case grouped in 4-char blocks, with one
+  SHA-256 checksum byte appended for typo detection. The recovery KEK is
+  HKDF-SHA256 of the entropy over the vault salt.
+- **Reason:** 160 bits is comfortably beyond brute-force; base32 avoids the
+  0/O/1/I ambiguity of base64 for human transcription; the checksum byte lets
+  the UI flag a typo before a failed unwrap. HKDF binds the recovery key to the
+  vault salt so the same code on a different vault (different salt) yields a
+  different KEK.
+- **Alternatives:** BIP-39 mnemonic words (more shareable, larger surface);
+  raw hex (hard to transcribe); UUID format (shorter, less entropy).
+- **Security consequences:** Positive — high entropy, typo-detectable, never
+  stored. The recovery key is shown once and zeroizes on drop.
+- **Data consequences:** The human form is the recovery contract; future
+  versions must keep it parseable.
+- **Reversibility:** Medium — format is versioned inside the wrapping design.
+- **Date:** 2026-08-05.
+- **Affected:** `src-tauri/src/crypto/recovery.rs`.
+
+## D009 — Per-vault directory layout; manifest outside the DB (Phase 1)
+- **Decision:** Each vault lives in `<app_data>/vaults/<vault_id>/` containing
+  `vault.json` (the manifest + `VaultKeyMaterial`) and `vault.db` (SQLCipher).
+  The manifest is stored *outside* the encrypted database.
+- **Reason:** The DEK encrypts the SQLCipher DB; the manifest must be readable
+  *before* unlock (it holds the wrapped DEK and Argon2id parameters needed to
+  derive the KEK). Storing wrapped keys (not the DEK) in an unencrypted
+  manifest is standard for this pattern and leaks no secret.
+- **Alternatives:** A single encrypted blob header (more complex; SQLCipher
+  cannot host its own key wrapper).
+- **Security consequences:** The manifest contains no plaintext DEK or
+  passphrase (verified by test); it is integrity-protected only by AES-GCM on
+  the wrapped blobs. A future hardening step could sign the manifest.
+- **Data consequences:** The directory layout is part of the on-disk contract;
+  backups (Phase 9) package these files.
+- **Reversibility:** Medium.
+- **Date:** 2026-08-05.
+- **Affected:** `src-tauri/src/vault.rs`.
+
+## D010 — SQLCipher keyed by raw DEK hex literal (Phase 1)
+- **Decision:** SQLCipher is keyed with `PRAGMA key = "x'<64 hex>'"` using the
+  32-byte DEK directly (not a passphrase-derived key via SQLCipher's own KDF).
+- **Reason:** Sammy owns the KDF (Argon2id, calibrated, with the chosen
+  parameters) and wraps the DEK itself. Disabling SQLCipher's internal KDF by
+  supplying a raw key avoids double-KDF and keeps all key derivation in our
+  audited `crypto` module. (We pass the raw DEK; SQLCipher recognizes a 64-hex
+  literal as a raw key and skips its KDF.)
+- **Alternatives:** Let SQLCipher derive from the passphrase (loses Argon2id
+  control and the separate recovery path).
+- **Security consequences:** Positive — single, audited KDF; enables the
+  recovery-unlock path (recovery KEK also unwraps the same DEK).
+- **Data consequences:** None.
+- **Reversibility:** High.
+- **Date:** 2026-08-05.
+- **Affected:** `src-tauri/src/vault.rs`.
+
+## D011 — One unlocked vault per process (Phase 1)
+- **Decision:** `AppState` holds at most one unlocked `Vault` session.
+- **Reason:** A single-user desktop app with one window benefits from a single
+  active vault: it makes the "lock clears active sensitive state" guarantee
+  (§10) trivial and avoids accidental cross-vault context bleed in the UI.
+  Other vaults remain on disk and can be selected after locking the current one.
+- **Alternatives:** Multiple simultaneously-unlocked vaults (higher cognitive
+  load; more leakage surface).
+- **Security consequences:** Positive — smaller in-memory secret surface.
+- **Data consequences:** None.
+- **Reversibility:** High.
+- **Date:** 2026-08-05.
+- **Affected:** `src-tauri/src/app.rs`.
+

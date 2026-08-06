@@ -34,6 +34,7 @@ pub mod app;
 pub mod error;
 pub mod ids;
 
+pub use app::app_data_dir;
 pub use error::{AppError, AppResult};
 
 use tauri::Manager;
@@ -69,7 +70,16 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .manage(app::AppState::default())
-        .invoke_handler(tauri::generate_handler![ping, app_meta])
+        .invoke_handler(tauri::generate_handler![
+            ping,
+            app_meta,
+            app::vault_create,
+            app::vault_list,
+            app::vault_unlock,
+            app::vault_unlock_recovery,
+            app::vault_lock,
+            app::vault_status,
+        ])
         .setup(|app| {
             #[cfg(debug_assertions)]
             {

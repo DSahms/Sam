@@ -3137,6 +3137,7 @@ dependencies = [
  "log",
  "proptest",
  "rand 0.8.7",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "rusqlite",
  "serde",

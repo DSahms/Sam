@@ -1,21 +1,36 @@
 {
   "project": "Sammy",
-  "current_phase": "Phase 0 complete; Phase 1 in progress",
-  "status": "foundation_verified",
+  "current_phase": "Phase 1 in progress (core crypto + vault done)",
+  "status": "phase_1_core_verified",
   "completed_capabilities": [
     "workspace_cargo_build",
     "frontend_vite_build",
-    "rust_unit_tests",
-    "frontend_component_tests",
     "fmt_and_lint_gate",
     "tauri_app_shell_with_navigation",
     "module_boundaries_defined",
     "canonical_documents",
-    "cli_binary_skeleton"
+    "cli_binary_skeleton",
+    "crypto_csprng",
+    "crypto_argon2id_kek",
+    "crypto_aes256_gcm",
+    "crypto_key_wrap",
+    "crypto_vault_key_material",
+    "crypto_recovery_code",
+    "vault_create",
+    "vault_unlock_passphrase",
+    "vault_unlock_recovery",
+    "vault_lock",
+    "vault_multi_vault_isolation",
+    "vault_sqlcipher_encrypted_at_rest",
+    "vault_tauri_commands_wired",
+    "vault_baseline_schema"
   ],
   "active_work": [
-    "phase_1_crypto_module",
-    "phase_1_vault_create_unlock_lock"
+    "phase_1_migration_runner",
+    "phase_1_audit_api",
+    "phase_1_inactivity_lock",
+    "phase_1_backup_restore",
+    "phase_1_frontend_vault_view_wiring"
   ],
   "known_failures": [],
   "external_blockers": [
@@ -27,27 +42,30 @@
     "build_requires_strawberry_perl_on_path"
   ],
   "security_debt": [
-    "phase_1_crypto_not_implemented",
-    "phase_1_sqlcipher_not_keyed",
-    "phase_1_audit_not_implemented"
+    "inactivity_lock_not_wired",
+    "session_lock_not_wired",
+    "audit_events_not_recorded_yet",
+    "migration_runner_not_versioned_with_rollback",
+    "backup_restore_not_implemented",
+    "frontend_does_not_call_vault_commands_yet"
   ],
   "test_summary": {
-    "rust": { "passed": 3, "failed": 0, "ignored": 0 },
+    "rust_unit": { "passed": 40, "failed": 0, "ignored": 0 },
+    "rust_integration": { "passed": 4, "failed": 0, "ignored": 0 },
     "frontend": { "passed": 3, "failed": 0, "ignored": 0 },
     "fmt_check": "pass",
-    "clippy": "clean",
+    "clippy": "clean (-D warnings)",
     "eslint": "pass",
     "prettier": "pass",
     "tsc_strict": "pass"
   },
-  "last_verified_commit": "pending_first_commit",
+  "last_verified_commit": "pending_phase_1_checkpoint",
   "next_actions": [
-    "implement crypto module: CSPRNG + Argon2id + AES-256-GCM + key wrap with unit tests",
-    "implement vault module: create / unlock / lock over SQLCipher",
-    "add DB migrations with rollback protection",
-    "add audit-event foundation",
-    "add inactivity + session lock handling",
-    "add initial full encrypted backup + restore"
+    "implement versioned migration runner with rollback protection",
+    "implement audit module API (record/query events)",
+    "wire inactivity (15 min default) + Windows session lock",
+    "implement initial full encrypted backup + restore",
+    "wire React Vaults view to vault_* Tauri commands"
   ],
-  "updated_at": "2026-08-05T10:25:00Z"
+  "updated_at": "2026-08-05T11:05:00Z"
 }

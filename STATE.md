@@ -3,7 +3,7 @@
 This file describes **only what currently works**, with evidence. It is updated
 every checkpoint. If something is not here, it does not work yet.
 
-Last updated: 2026-08-05
+Last updated: 2026-08-05 (Phase 1 in progress)
 
 ## Works now
 
@@ -13,46 +13,59 @@ Last updated: 2026-08-05
   source via `rusqlite`'s `bundled-sqlcipher-vendored-openssl` feature.
 - **Frontend builds.** `npx vite build` produces a production bundle
   (~148 KB JS / ~2 KB CSS) in `dist/`.
-- **Rust tests pass.** `cargo test --workspace` → 3 passed, 0 failed
-  (typed-id round-trip / rejection / uniqueness).
-- **Frontend tests pass.** `npx vitest run` → 3 passed, 0 failed (Sidebar
-  renders all eight destinations, marks active, notifies on select).
-- **Quality gate (partial).** `cargo fmt --all -- --check` passes;
-  `cargo clippy --workspace --all-targets` is clean (0 warnings);
-  `npx eslint . --max-warnings=0` passes; `npx prettier --check` passes;
-  `npx tsc -p tsconfig.app.json --noEmit` passes.
-- **App runs.** `sammy` Tauri binary compiles and registers two commands
-  (`ping`, `app_meta`); the React shell renders the sidebar + 8 views and
-  calls `app_meta` to show version + lock state.
-- **CLI binary.** `sammy-cli --version` / `--help` work; `corpus validate`
-  is a stub until Phase 6.
-- **Module boundaries.** All §7 subsystems exist as Rust modules (`crypto`,
-  `vault`, `audit`, `identity`, `conversation`, `providers`, `knowledge`,
-  `corpus`, `sources`, `retrieval`, `citations`, `memory`, `permissions`,
-  `tools`, `backup`, `settings`) plus shared `ids`, `error`, `app`.
-- **Docs.** All canonical project documents and `docs/` deep-dives exist.
+- **Rust tests pass.** See Phase 1 numbers below.
+- **Frontend tests pass.** `npx vitest run` → 3 passed, 0 failed.
+- **Quality gate green.** `cargo fmt --check`, `cargo clippy -D warnings`,
+  `eslint --max-warnings=0`, `prettier --check`, `tsc --noEmit` all pass.
+- **App runs.** Tauri binary compiles with `ping`, `app_meta`, and the vault
+  commands registered; React shell renders sidebar + 8 views.
+- **CLI binary.** `sammy-cli --version` / `--help` work.
 
-### Vault spine (Phase 1 — in progress)
-- Nothing in Phase 1 is wired yet. `crypto`, `vault`, `audit`, `backup`,
-  `settings` modules contain only their scope documentation. The `AppState`
-  holds a placeholder `Option<VaultId>`; no real unlock exists.
+### Cryptographic vault spine (Phase 1 — core complete, integration ongoing)
+- **`crypto` module (done).** `SecretKey` (zeroizing, constant-time eq), CSPRNG
+  (ChaCha20Rng seeded from OS RNG), Argon2id KEK derivation, AES-256-GCM
+  encrypt/decrypt, key wrap/unwrap, `VaultKeyMaterial` (versioned record with
+  passphrase + recovery unwrap, never stores plaintext DEK), high-entropy
+  recovery codes (160 bits, base32 + checksum, human-transmissible). 29 unit
+  tests cover round-trips, tamper detection, wrong-key failure, and proof that
+  material contains no plaintext DEK/passphrase.
+- **`vault` module (done).** `VaultRegistry` over a per-user app-data dir;
+  per-vault directory with `vault.json` (manifest + wrapped keys, no DEK) and
+  `vault.db` (SQLCipher, keyed by the DEK). Create / unlock (passphrase or
+  recovery) / lock / list / delete; multi-vault isolation enforced;
+  SQLCipher DB verified not plaintext on disk; manifest verified free of
+  plaintext secrets. 11 unit tests + 4 integration tests.
+- **Tauri commands wired (done).** `vault_create`, `vault_list`,
+  `vault_unlock`, `vault_unlock_recovery`, `vault_lock`, `vault_status`.
+  `AppState` holds the registry and at most one unlocked `Vault` session.
+  `AppError` serializes to a sanitized `{kind, message}` for the frontend.
+- **DB baseline (done).** New vaults get an initialized SQLCipher DB with an
+  `audit_events` table and a `schema_version` row.
+
+## Verified Phase 1 exit criteria (so far)
+- ✅ Private access impossible before unlock (commands check `AppState`).
+- ✅ Wrong passwords fail safely (`AppError::Crypto`, opaque).
+- ✅ Recovery-key restore works (passphrase OR recovery both unwrap the DEK).
+- ✅ Database content is not readable as plaintext (SQLCipher; tested).
+- ✅ Vaults cannot access one another (separate DEKs/DBs; tested).
 
 ## Known limitations / mocks in use
-
-- All Phase 1+ subsystems are stubs. No real vault, crypto, DB, audit, or
-  backup behavior exists yet.
-- The eight UI views are placeholders describing their implementing phase.
-- No code-signing; builds produce unsigned dev packages.
-- npm dev-dependency audit advisories exist (dev-only, not shipped).
+- Inactivity / Windows session-lock auto-lock not yet wired (§10).
+- Versioned migration *runner* with rollback protection not yet implemented
+  (baseline schema is applied directly; `schema_version` row is set).
+- Audit-event *foundation* table exists but no `audit` module API records
+  events yet.
+- Initial full encrypted backup / restore not yet implemented.
+- The eight UI views are still placeholders; vault commands are not yet
+  called from the React frontend.
 
 ## External blockers
-
 See `EXTERNAL_BLOCKERS.md`: build PATH must include Strawberry Perl (present);
 no code-signing cert; no Venice API key; no KoboldCpp endpoint; OCR binding not
 finalized; license report not yet generated. None block the build or tests.
 
 ## Next work
-
-Begin Phase 1's first vertical slice: the `crypto` module (CSPRNG, Argon2id,
-AES-256-GCM, key wrap) with unit tests, followed by the `vault` module
-(create/unlock/lock) over a real SQLCipher database.
+1. Versioned migration runner with rollback protection + an `audit` module API.
+2. Inactivity (default 15 min) + Windows session-lock handling.
+3. Initial full encrypted backup + restore.
+4. Wire the React `Vaults` view to the vault commands end-to-end.
