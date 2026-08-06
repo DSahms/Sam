@@ -175,3 +175,58 @@ reversibility, date, and affected files.
 - **Date:** 2026-08-05.
 - **Affected:** `src-tauri/src/app.rs`.
 
+## D012 — Forward-only migrations with per-migration transactions (Phase 1)
+- **Decision:** Migrations are forward-only, contiguous, versioned, and each
+  runs inside its own SQL transaction. `schema_version` advances only after a
+  migration commits; a failed migration rolls back and the version does not
+  advance. There is no automatic downgrade.
+- **Reason:** Directive §37 forbids "database migration without rollback
+  protection." Per-migration transactions guarantee a migration is atomic; the
+  version-only-after-commit rule guarantees a crash never records an un-applied
+  schema. No downgrade path means we never silently destroy data to roll back.
+- **Alternatives:** Out-of-order migrations (sqitch-style); automatic downgrade
+  scripts (complex, error-prone, risky for an encrypted store).
+- **Security consequences:** Positive — the database is never left in a
+  half-migrated state.
+- **Data consequences:** A failed migration is a hard error the user must
+  resolve (e.g. by restoring a backup); the DB remains usable at its last good
+  version.
+- **Reversibility:** Low for the design (intentionally); high for any single
+  migration (it rolls back).
+- **Date:** 2026-08-05.
+- **Affected:** `src-tauri/src/db.rs`.
+
+## D013 — Append-only audit with no mutation path (Phase 1)
+- **Decision:** The `audit` module exposes only `record` and `list`/`count`
+  queries. There is deliberately no `delete` or `update` for audit rows.
+- **Reason:** Directive §7 calls for append-only audit history; exposing no
+  mutation path makes tampering structurally harder (within the threat model —
+  an attacker with the unlocked DB can still write SQL, which a future
+  hardening step may address with a tamper-evident chain).
+- **Alternatives:** Allow deletion with a separate privilege (rejected: violates
+  append-only).
+- **Security consequences:** Positive — history cannot be rewritten through the
+  API.
+- **Data consequences:** Audit history grows monotonically; the Privacy & Audit
+  view paginates via `limit`.
+- **Reversibility:** High (a future version could add redaction with approval).
+- **Date:** 2026-08-05.
+- **Affected:** `src-tauri/src/audit.rs`.
+
+## D014 — Native-thread inactivity checker; clock abstracted (Phase 1)
+- **Decision:** The inactivity checker is a plain `std::thread` that sleeps 30s
+  between checks and calls `AppState::check_inactivity_lock`. The watchdog's
+  time source is abstracted behind a `Clock` trait (`SystemClock` in
+  production) so the logic is unit-testable with deterministic time.
+- **Reason:** Avoids pulling tokio as a direct dependency just for one timer;
+  keeps the watchdog logic pure and testable. 30s granularity is well below the
+  5-minute minimum policy.
+- **Alternatives:** `tauri::async_runtime` timer (API not available); a tokio
+  interval (extra dependency).
+- **Security consequences:** Neutral — locks promptly after the threshold.
+- **Data consequences:** None.
+- **Reversibility:** High.
+- **Date:** 2026-08-05.
+- **Affected:** `src-tauri/src/lock.rs`, `src-tauri/src/lib.rs`.
+
+

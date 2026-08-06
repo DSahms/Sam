@@ -1,7 +1,7 @@
 {
   "project": "Sammy",
-  "current_phase": "Phase 1 in progress (core crypto + vault done)",
-  "status": "phase_1_core_verified",
+  "current_phase": "Phase 1 in progress (vault spine + functional UI)",
+  "status": "phase_1_core_and_ui_verified",
   "completed_capabilities": [
     "workspace_cargo_build",
     "frontend_vite_build",
@@ -23,14 +23,16 @@
     "vault_multi_vault_isolation",
     "vault_sqlcipher_encrypted_at_rest",
     "vault_tauri_commands_wired",
-    "vault_baseline_schema"
+    "vault_baseline_schema",
+    "db_versioned_migrations_with_rollback",
+    "audit_append_only_api",
+    "lock_inactivity_watchdog",
+    "lock_policy_commands",
+    "frontend_vaults_view_functional"
   ],
   "active_work": [
-    "phase_1_migration_runner",
-    "phase_1_audit_api",
-    "phase_1_inactivity_lock",
     "phase_1_backup_restore",
-    "phase_1_frontend_vault_view_wiring"
+    "phase_1_windows_session_lock_hook"
   ],
   "known_failures": [],
   "external_blockers": [
@@ -42,30 +44,26 @@
     "build_requires_strawberry_perl_on_path"
   ],
   "security_debt": [
-    "inactivity_lock_not_wired",
-    "session_lock_not_wired",
-    "audit_events_not_recorded_yet",
-    "migration_runner_not_versioned_with_rollback",
+    "windows_session_lock_not_hooked_only_inactivity_check",
+    "audit_events_not_recorded_by_any_command_yet",
     "backup_restore_not_implemented",
-    "frontend_does_not_call_vault_commands_yet"
+    "phase_2_through_8_subsystems_are_stubs"
   ],
   "test_summary": {
-    "rust_unit": { "passed": 40, "failed": 0, "ignored": 0 },
+    "rust_unit": { "passed": 56, "failed": 0, "ignored": 0 },
     "rust_integration": { "passed": 4, "failed": 0, "ignored": 0 },
-    "frontend": { "passed": 3, "failed": 0, "ignored": 0 },
+    "frontend": { "passed": 6, "failed": 0, "ignored": 0 },
     "fmt_check": "pass",
     "clippy": "clean (-D warnings)",
     "eslint": "pass",
     "prettier": "pass",
     "tsc_strict": "pass"
   },
-  "last_verified_commit": "ca10ffd",
+  "last_verified_commit": "2438865",
   "next_actions": [
-    "implement versioned migration runner with rollback protection",
-    "implement audit module API (record/query events)",
-    "wire inactivity (15 min default) + Windows session lock",
-    "implement initial full encrypted backup + restore",
-    "wire React Vaults view to vault_* Tauri commands"
+    "implement initial full encrypted backup + restore (§30/§31)",
+    "hook Windows session-lock signal to lock vault",
+    "begin Phase 2: identity, conversation model, mock/KoboldCpp/Venice providers"
   ],
-  "updated_at": "2026-08-05T11:05:00Z"
+  "updated_at": "2026-08-05T11:45:00Z"
 }
