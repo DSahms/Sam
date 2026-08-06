@@ -19,6 +19,7 @@ pub mod citations;
 pub mod conversation;
 pub mod corpus;
 pub mod crypto;
+pub mod db;
 pub mod identity;
 pub mod knowledge;
 pub mod memory;

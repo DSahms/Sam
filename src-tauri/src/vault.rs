@@ -198,7 +198,10 @@ impl VaultRegistry {
         manifest: &VaultManifest,
         dek: SecretKey,
     ) -> AppResult<Vault> {
-        let conn = open_sqlcipher_db(&self.db_path(vault_id), &dek)?;
+        let mut conn = open_sqlcipher_db(&self.db_path(vault_id), &dek)?;
+        // Apply any pending migrations on unlock so a vault created with an
+        // older schema always opens cleanly on a newer build.
+        crate::db::run_pending(&mut conn)?;
         Ok(Vault {
             vault_id,
             name: manifest.name.clone(),
