@@ -1,0 +1,53 @@
+{
+  "project": "Sammy",
+  "current_phase": "Phase 0 complete; Phase 1 in progress",
+  "status": "foundation_verified",
+  "completed_capabilities": [
+    "workspace_cargo_build",
+    "frontend_vite_build",
+    "rust_unit_tests",
+    "frontend_component_tests",
+    "fmt_and_lint_gate",
+    "tauri_app_shell_with_navigation",
+    "module_boundaries_defined",
+    "canonical_documents",
+    "cli_binary_skeleton"
+  ],
+  "active_work": [
+    "phase_1_crypto_module",
+    "phase_1_vault_create_unlock_lock"
+  ],
+  "known_failures": [],
+  "external_blockers": [
+    "no_code_signing_certificate",
+    "no_venice_api_key",
+    "no_koboldcpp_endpoint",
+    "ocr_binding_not_finalized",
+    "license_report_not_generated",
+    "build_requires_strawberry_perl_on_path"
+  ],
+  "security_debt": [
+    "phase_1_crypto_not_implemented",
+    "phase_1_sqlcipher_not_keyed",
+    "phase_1_audit_not_implemented"
+  ],
+  "test_summary": {
+    "rust": { "passed": 3, "failed": 0, "ignored": 0 },
+    "frontend": { "passed": 3, "failed": 0, "ignored": 0 },
+    "fmt_check": "pass",
+    "clippy": "clean",
+    "eslint": "pass",
+    "prettier": "pass",
+    "tsc_strict": "pass"
+  },
+  "last_verified_commit": "pending_first_commit",
+  "next_actions": [
+    "implement crypto module: CSPRNG + Argon2id + AES-256-GCM + key wrap with unit tests",
+    "implement vault module: create / unlock / lock over SQLCipher",
+    "add DB migrations with rollback protection",
+    "add audit-event foundation",
+    "add inactivity + session lock handling",
+    "add initial full encrypted backup + restore"
+  ],
+  "updated_at": "2026-08-05T10:25:00Z"
+}

@@ -1,0 +1,8 @@
+[alias]
+# Repeatable quality gate for Rust.
+check-all = "clippy --workspace --all-targets --all-features -- -D warnings"
+test-all = "test --workspace"
+
+[build]
+# Speed up incremental dev builds a little.
+incremental = true

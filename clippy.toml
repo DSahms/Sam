@@ -1,0 +1,2 @@
+# Clippy baseline lints. Sammy is security-sensitive; we keep the bar high.
+msrv = "1.77"

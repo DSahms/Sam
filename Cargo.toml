@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+authors = ["Sammy Project"]
+license = "LicenseRef-Sammy-Proprietary"
+repository = ""
+
+# Shared profile settings: keep dev builds fast, release builds small.
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[profile.dev]
+debug = 1

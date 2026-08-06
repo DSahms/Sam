@@ -1,0 +1,72 @@
+[package]
+name = "sammy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Sammy — encryption-first, local-first personal AI consigliere."
+default-run = "sammy"
+
+[lib]
+name = "sammy_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "sammy"
+path = "src/main.rs"
+
+[[bin]]
+name = "sammy-cli"
+path = "src/bin/cli.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+# --- Tauri core ---
+tauri = { version = "2.1", features = [] }
+tauri-plugin-dialog = "2.0"
+tauri-plugin-fs = "2.0"
+tauri-plugin-opener = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# --- Crypto (Phase 1 spine) ---
+# rand: CSPRNG
+rand = "0.8"
+rand_core = { version = "0.6", features = ["std"] }
+# Argon2id KDF
+argon2 = "0.5"
+# AES-256-GCM for source files / exports / backups
+aes-gcm = "0.10"
+# Constant-time comparison & generic hashing utilities
+subtle = "2"
+# Key wrapping (RFC 3394 / NIST KWP) for vault & recovery keys
+hkdf = "0.12"
+sha2 = "0.10"
+# Secure zeroing of secret buffers
+zeroize = { version = "1", features = ["derive", "zeroize_derive"] }
+# Base64 / hex encoding for stored blobs
+base64 = "0.22"
+hex = "0.4"
+
+# --- Error handling ---
+thiserror = "2"
+anyhow = "1"
+
+# --- Logging (sanitized; secrets never logged) ---
+log = "0.4"
+
+# --- Time / ids ---
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+
+# --- SQLCipher (Phase 1) ---
+# Bundled SQLCipher + vendored OpenSSL via rusqlite features. This compiles
+# SQLCipher AND OpenSSL from C source with the MSVC toolchain, so the app needs
+# no system OpenSSL/SQLite install — suitable for an offline per-user app.
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1"
