@@ -22,6 +22,7 @@ pub mod crypto;
 pub mod db;
 pub mod identity;
 pub mod knowledge;
+pub mod lock;
 pub mod memory;
 pub mod permissions;
 pub mod providers;
@@ -80,8 +81,23 @@ pub fn run() {
             app::vault_unlock_recovery,
             app::vault_lock,
             app::vault_status,
+            app::touch_activity,
+            app::lock_policy_get,
+            app::lock_policy_set,
         ])
         .setup(|app| {
+            // Periodic inactivity-lock checker: a native thread ticks every 30
+            // seconds and locks the vault if the configured inactivity threshold
+            // has elapsed. Manual-only policy makes this a no-op. This runs for
+            // the lifetime of the app process.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                let state = handle.state::<app::AppState>();
+                if let Ok(true) = state.check_inactivity_lock() {
+                    log::info!("vault locked due to inactivity");
+                }
+            });
             #[cfg(debug_assertions)]
             {
                 if let Some(window) = app.get_webview_window("main") {

@@ -8,10 +8,12 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::crypto::recovery::RecoveryCode;
 use crate::error::{AppError, AppResult};
 use crate::ids::VaultId;
+use crate::lock::{InactivityWatchdog, LockPolicy};
 use crate::vault::{Vault, VaultRegistry, VaultTemplate};
 
 /// Process-wide state managed by Tauri. Holds the vault registry and at most
@@ -25,14 +27,15 @@ struct AppStateInner {
     registry: VaultRegistry,
     /// `Some` when a vault is currently unlocked.
     active: Option<Vault>,
+    /// Inactivity watchdog. Reset on user activity; a periodic ticker calls
+    /// [`AppState::check_inactivity_lock`].
+    watchdog: InactivityWatchdog,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         let root = VaultRegistry::default_root();
         let registry = VaultRegistry::new(root).unwrap_or_else(|_| {
-            // Fall back to a temp-relative registry if the default dir is
-            // unavailable; this should not happen in normal installs.
             let fallback = PathBuf::from(".").join("sammy-data").join("vaults");
             VaultRegistry::new(fallback).expect("fallback registry")
         });
@@ -40,6 +43,7 @@ impl Default for AppState {
             inner: Arc::new(Mutex::new(AppStateInner {
                 registry,
                 active: None,
+                watchdog: InactivityWatchdog::new(LockPolicy::default(), Instant::now()),
             })),
         }
     }
@@ -78,14 +82,61 @@ impl AppState {
         }
     }
 
-    /// Lock the active vault (drop the session).
+    /// Lock the active vault (drop the session). Also resets the inactivity
+    /// timer so a freshly-unlocked vault gets a full window.
     pub fn lock(&self) -> AppResult<()> {
         let mut g = self
             .inner
             .lock()
             .map_err(|_| AppError::Config("state poisoned".into()))?;
         g.active = None;
+        g.watchdog.touch(Instant::now());
         Ok(())
+    }
+
+    /// Record user activity (resets the inactivity timer). Called on any
+    /// user-initiated vault command.
+    pub fn touch_activity(&self) {
+        if let Ok(mut g) = self.inner.lock() {
+            g.watchdog.touch(Instant::now());
+        }
+    }
+
+    /// Get the current inactivity-lock policy.
+    pub fn lock_policy(&self) -> LockPolicy {
+        self.inner
+            .lock()
+            .map(|g| g.watchdog.policy())
+            .unwrap_or_default()
+    }
+
+    /// Set the inactivity-lock policy. Takes effect immediately for subsequent
+    /// `should_lock` checks.
+    pub fn set_lock_policy(&self, policy: LockPolicy) -> AppResult<()> {
+        let mut g = self
+            .inner
+            .lock()
+            .map_err(|_| AppError::Config("state poisoned".into()))?;
+        g.watchdog = InactivityWatchdog::new(policy, Instant::now());
+        Ok(())
+    }
+
+    /// Check whether the inactivity threshold has elapsed; if so, lock the
+    /// vault. Called by a periodic ticker. Returns true if a lock occurred.
+    pub fn check_inactivity_lock(&self) -> AppResult<bool> {
+        let should = {
+            let g = self
+                .inner
+                .lock()
+                .map_err(|_| AppError::Config("state poisoned".into()))?;
+            g.active.is_some() && g.watchdog.should_lock(Instant::now())
+        };
+        if should {
+            self.lock()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     pub fn is_unlocked(&self) -> bool {
@@ -222,6 +273,28 @@ pub fn vault_status(state: tauri::State<AppState>) -> serde_json::Value {
         "unlocked": state.is_unlocked(),
         "active_vault_id": state.active_vault_id().map(|i| i.to_string()),
     })
+}
+
+/// Record user activity, resetting the inactivity timer. The frontend should
+/// call this on meaningful user input.
+#[tauri::command]
+pub fn touch_activity(state: tauri::State<AppState>) {
+    state.touch_activity();
+}
+
+/// Get the current inactivity-lock policy.
+#[tauri::command]
+pub fn lock_policy_get(state: tauri::State<AppState>) -> LockPolicy {
+    state.lock_policy()
+}
+
+/// Set the inactivity-lock policy.
+#[tauri::command]
+pub fn lock_policy_set(
+    state: tauri::State<AppState>,
+    policy: LockPolicy,
+) -> AppResult<()> {
+    state.set_lock_policy(policy)
 }
 
 // Suppress unused import warning when RecoveryCode import is only used in type.
