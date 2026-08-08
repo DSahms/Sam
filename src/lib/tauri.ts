@@ -65,10 +65,124 @@ export const api = {
   touchActivity: () => invoke<void>("touch_activity"),
   lockPolicyGet: () => invoke<LockPolicy>("lock_policy_get"),
   lockPolicySet: (policy: LockPolicy) => invoke<void>("lock_policy_set", { policy }),
+  vaultBackup: (
+    vaultId: string,
+    passphrase: string,
+    recoveryCode: string,
+    outPath: string,
+  ) => invoke<void>("vault_backup", { vaultId, passphrase, recoveryCode, outPath }),
+  vaultRestorePassphrase: (inPath: string, passphrase: string) =>
+    invoke<string>("vault_restore_passphrase", { inPath, passphrase }),
+  vaultRestoreRecovery: (inPath: string, recoveryCode: string) =>
+    invoke<string>("vault_restore_recovery", { inPath, recoveryCode }),
+  vaultBackupPreview: (inPath: string) =>
+    invoke<{
+      format_version: number;
+      vault_id: string;
+      vault_name: string;
+      created_at: string;
+    }>("vault_backup_preview", { inPath }),
+
+  // Conversations + chat
+  conversationList: () => invoke<ConversationSummary[]>("conversation_list"),
+  conversationCreate: (title: string | null) =>
+    invoke<string>("conversation_create", { title: title ?? null }),
+  conversationMessages: (conversationId: string) =>
+    invoke<MessageSummary[]>("conversation_messages", { conversationId }),
+  chatSend: (
+    conversationId: string,
+    text: string,
+    routing: RoutingMode,
+    model: string,
+    confirmed: boolean,
+  ) =>
+    invoke<ChatSendResult>("chat_send", {
+      conversationId,
+      text,
+      routing,
+      model,
+      confirmed,
+    }),
+
+  // Identity
+  identityGet: () => invoke<CompanionIdentity>("identity_get"),
+  identitySave: (identity: CompanionIdentity, editSummary: string) =>
+    invoke<void>("identity_save", { identity, editSummary }),
 };
 
 export type LockPolicy =
   "minutes_5" | "minutes_15" | "minutes_30" | "minutes_60" | "manual_only";
+
+export type RoutingMode =
+  "local_only" | "prefer_local" | "prefer_cloud" | "cloud_only" | "ask_before_crossing";
+
+export const ROUTING_MODE_LABELS: Record<RoutingMode, string> = {
+  local_only: "Local only",
+  prefer_local: "Prefer local",
+  prefer_cloud: "Prefer cloud",
+  cloud_only: "Cloud only",
+  ask_before_crossing: "Ask before crossing (default)",
+};
+
+export interface ConversationSummary {
+  conversation_id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageSummary {
+  message_id: string;
+  role: string;
+  content: string;
+  seq: number;
+}
+
+export interface CloudConsentView {
+  provider_id: string;
+  provider_display_name: string;
+  model: string;
+  routing_mode: string;
+}
+
+export interface PromptSectionSummary {
+  id: string;
+  title: string;
+  body_chars: number;
+}
+
+export interface ChatSendResult {
+  content: string | null;
+  provider: string | null;
+  model: string | null;
+  crossed_to_cloud: boolean;
+  consent_required: CloudConsentView | null;
+  prompt_summary: PromptSectionSummary[];
+}
+
+export interface IdentityVersionEntry {
+  version: number;
+  changed_at: string;
+  summary: string;
+}
+
+export interface CompanionIdentity {
+  version: number;
+  companion_name: string;
+  role: string;
+  core_principles: string[];
+  conversational_traits: string[];
+  tone_preferences: string[];
+  user_communication_preferences: string[];
+  boundaries: string[];
+  honesty_requirements: string[];
+  uncertainty_behavior: string;
+  privacy_rules: string[];
+  memory_rules: string[];
+  tool_use_rules: string[];
+  approved_knowledge_references: string[];
+  version_history: IdentityVersionEntry[];
+}
 
 export const LOCK_POLICY_LABELS: Record<LockPolicy, string> = {
   minutes_5: "5 minutes",

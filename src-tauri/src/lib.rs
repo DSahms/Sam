@@ -92,6 +92,12 @@ pub fn run() {
             app::vault_restore_passphrase,
             app::vault_restore_recovery,
             app::vault_backup_preview,
+            app::conversation_list,
+            app::conversation_create,
+            app::conversation_messages,
+            app::chat_send,
+            app::identity_get,
+            app::identity_save,
         ])
         .setup(|app| {
             // Periodic lock checker: a native thread ticks every 15 seconds and

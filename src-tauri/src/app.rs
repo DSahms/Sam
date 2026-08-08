@@ -360,6 +360,188 @@ pub fn vault_backup_preview(in_path: String) -> AppResult<serde_json::Value> {
     }))
 }
 
+// -----------------------------------------------------------------------------
+// Conversation + chat commands
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct ConversationSummary {
+    pub conversation_id: String,
+    pub title: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<&crate::conversation::Conversation> for ConversationSummary {
+    fn from(c: &crate::conversation::Conversation) -> Self {
+        Self {
+            conversation_id: c.conversation_id.clone(),
+            title: c.title.clone(),
+            created_at: c.created_at.clone(),
+            updated_at: c.updated_at.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct MessageSummary {
+    pub message_id: String,
+    pub role: String,
+    pub content: String,
+    pub seq: i64,
+}
+
+/// List conversations in the active vault.
+#[tauri::command]
+pub fn conversation_list(
+    state: tauri::State<AppState>,
+) -> AppResult<Vec<ConversationSummary>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let list = crate::conversation::list(&conn)?;
+        Ok(list.iter().map(ConversationSummary::from).collect())
+    })?
+}
+
+/// Create a new conversation.
+#[tauri::command]
+pub fn conversation_create(
+    state: tauri::State<AppState>,
+    title: Option<String>,
+) -> AppResult<String> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let id = crate::conversation::create(&conn, title.as_deref())?;
+        Ok(id.to_string())
+    })?
+}
+
+/// Load messages of a conversation.
+#[tauri::command]
+pub fn conversation_messages(
+    state: tauri::State<AppState>,
+    conversation_id: String,
+) -> AppResult<Vec<MessageSummary>> {
+    let cid = crate::ids::ConversationId::parse(&conversation_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let msgs = crate::conversation::messages(&conn, cid)?;
+        Ok(msgs
+            .iter()
+            .map(|m| MessageSummary {
+                message_id: m.message_id.clone(),
+                role: m.role.clone(),
+                content: m.content.clone(),
+                seq: m.seq,
+            })
+            .collect())
+    })?
+}
+
+/// Result of a chat send: either the assistant response, or a consent request
+/// that the UI must confirm before re-calling with `confirmed = true`.
+#[derive(Debug, Serialize)]
+pub struct ChatSendResult {
+    pub content: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub crossed_to_cloud: bool,
+    /// Present when a cloud crossing needs owner consent.
+    pub consent_required: Option<CloudConsentView>,
+    /// Sanitized prompt-section summaries (lengths, not bodies).
+    pub prompt_summary: Vec<crate::identity::PromptSectionSummary>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct CloudConsentView {
+    pub provider_id: String,
+    pub provider_display_name: String,
+    pub model: String,
+    pub routing_mode: String,
+}
+
+/// Send a chat turn. If a cloud crossing is required, returns `consent_required`
+/// instead of a response; the frontend then re-calls with `confirmed = true`.
+/// Uses the deterministic mock provider for now (real provider wiring is a
+/// follow-up slice that adds provider configuration to settings).
+#[tauri::command]
+pub fn chat_send(
+    state: tauri::State<AppState>,
+    conversation_id: String,
+    text: String,
+    routing: crate::providers::RoutingMode,
+    model: String,
+    confirmed: bool,
+) -> AppResult<ChatSendResult> {
+    let cid = crate::ids::ConversationId::parse(&conversation_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let roster = crate::chat::ProviderRoster::mock_only();
+        // The mock is local, so for local_only/prefer_local/ask_before_crossing
+        // it is used directly. Cloud-only/prefer-cloud require consent since the
+        // mock is classified local — we simulate the consent path by checking
+        // routing here without a cloud provider present.
+        let turn = crate::chat::ChatTurn {
+            conversation_id: cid,
+            user_text: text,
+            routing,
+            max_tokens: 512,
+            model,
+        };
+        let allow = confirmed;
+        let consent: crate::chat::ConsentFn = Box::new(move |_| allow);
+        match crate::chat::run_turn(&conn, &roster, &[true], &[], &turn, &consent) {
+            Ok(r) => Ok(ChatSendResult {
+                content: Some(r.response.content.clone()),
+                provider: Some(r.response.provider.clone()),
+                model: Some(r.response.model.clone()),
+                crossed_to_cloud: r.response.crossed_to_cloud,
+                consent_required: r.consent_requested.map(|c| CloudConsentView {
+                    provider_id: c.provider_id,
+                    provider_display_name: c.provider_display_name,
+                    model: c.model,
+                    routing_mode: c.routing_mode,
+                }),
+                prompt_summary: r.prompt_summary,
+            }),
+            Err(AppError::Config(msg)) if msg.contains("denied by owner") => {
+                Err(AppError::Config(msg))
+            }
+            Err(e) => Err(e),
+        }
+    })?
+}
+
+// -----------------------------------------------------------------------------
+// Identity commands
+// -----------------------------------------------------------------------------
+
+/// Get the active vault's companion identity (or the default if unset).
+#[tauri::command]
+pub fn identity_get(
+    state: tauri::State<AppState>,
+) -> AppResult<crate::identity::CompanionIdentity> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::identity::store::load_or_default(&conn)
+    })?
+}
+
+/// Save the companion identity for the active vault.
+#[tauri::command]
+pub fn identity_save(
+    state: tauri::State<AppState>,
+    identity: crate::identity::CompanionIdentity,
+    edit_summary: String,
+) -> AppResult<()> {
+    state.with_active(|v| {
+        let mut id = identity;
+        id.record_edit(edit_summary);
+        let conn = v.lock_conn();
+        crate::identity::store::save(&conn, &id)
+    })?
+}
+
 // Suppress unused import warning when RecoveryCode import is only used in type.
 #[allow(unused_imports)]
 use RecoveryCode as _RecoveryCode;
