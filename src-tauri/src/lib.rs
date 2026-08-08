@@ -11,7 +11,10 @@
 //! - `identity`, `conversation`, `providers`, `knowledge`, `corpus`,
 //!   `sources`, `retrieval`, `citations`, `memory`, `permissions`, `tools`,
 //!   `backup`, `settings` — stubs, filled in by later phases.
-#![forbid(unsafe_code)]
+// `unsafe` is denied crate-wide; the only audited exception is the Windows
+// session-lock FFI in `lock::is_session_locked_windows`. Use `#[allow(unsafe_code)]`
+// only on that function, never elsewhere.
+#![deny(unsafe_code)]
 
 pub mod audit;
 pub mod backup;
@@ -90,14 +93,24 @@ pub fn run() {
             app::vault_backup_preview,
         ])
         .setup(|app| {
-            // Periodic inactivity-lock checker: a native thread ticks every 30
-            // seconds and locks the vault if the configured inactivity threshold
-            // has elapsed. Manual-only policy makes this a no-op. This runs for
-            // the lifetime of the app process.
+            // Periodic lock checker: a native thread ticks every 15 seconds and
+            // locks the vault if (a) the configured inactivity threshold has
+            // elapsed, or (b) the OS session is currently locked (directive §10:
+            // "always lock when the Windows session locks"). Manual-only policy
+            // makes the inactivity check a no-op; the session-lock check always
+            // applies. This runs for the lifetime of the app process.
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(30));
+                std::thread::sleep(std::time::Duration::from_secs(15));
                 let state = handle.state::<app::AppState>();
+                // OS session-lock: lock immediately regardless of policy.
+                if crate::lock::is_session_locked() {
+                    if state.is_unlocked() {
+                        let _ = state.lock();
+                        log::info!("vault locked due to OS session lock");
+                    }
+                    continue;
+                }
                 if let Ok(true) = state.check_inactivity_lock() {
                     log::info!("vault locked due to inactivity");
                 }

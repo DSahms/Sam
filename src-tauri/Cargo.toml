@@ -62,6 +62,14 @@ log = "0.4"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 
+# --- Windows session-lock detection (Windows-only) ---
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_Threading",
+] }
+
 # --- SQLCipher (Phase 1) ---
 # Bundled SQLCipher + vendored OpenSSL via rusqlite features. This compiles
 # SQLCipher AND OpenSSL from C source with the MSVC toolchain, so the app needs

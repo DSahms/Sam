@@ -111,6 +111,68 @@ impl Clock for SystemClock {
     }
 }
 
+// -----------------------------------------------------------------------------
+// OS session-lock detection
+// -----------------------------------------------------------------------------
+
+/// Returns `true` if the OS session is currently locked. Used by the periodic
+/// checker to lock the vault immediately when the user locks their Windows
+/// session (directive §10: "always lock when the Windows session locks").
+///
+/// On Windows, a locked session switches the active input desktop to the
+/// "Winlogon" desktop; we detect that by reading the current thread's desktop
+/// name. On non-Windows targets this is a no-op (returns `false`); other
+/// platforms are out of scope for the first release (§2).
+pub fn is_session_locked() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        is_session_locked_windows()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
+fn is_session_locked_windows() -> bool {
+    use windows_sys::Win32::System::StationsAndDesktops::{
+        GetThreadDesktop, GetUserObjectInformationW, UOI_NAME,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+
+    // SAFETY: GetCurrentThreadId returns the calling thread's id, always valid.
+    // GetThreadDesktop reads the desktop of that thread. We only read a
+    // fixed-size buffer. This is the one audited unsafe block in Sammy.
+    unsafe {
+        let desktop = GetThreadDesktop(GetCurrentThreadId());
+        if desktop.is_null() {
+            return false;
+        }
+        let mut buf = [0u16; 256];
+        let mut needed = 0u32;
+        // If the call fails, assume not locked (fail-open: the inactivity timer
+        // still covers the lock case within 5+ minutes).
+        let ok = GetUserObjectInformationW(
+            desktop,
+            UOI_NAME,
+            buf.as_mut_ptr() as *mut _,
+            (buf.len() * 2) as u32,
+            &mut needed,
+        );
+        if ok == 0 {
+            return false;
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        let name = String::from_utf16_lossy(&buf[..len]);
+        // When the session is locked, the active desktop is "Winlogon" (or on
+        // some configurations a screensaver desktop). The normal interactive
+        // desktop is "Default".
+        name.eq_ignore_ascii_case("Winlogon") || name.eq_ignore_ascii_case("Screen-saver")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
