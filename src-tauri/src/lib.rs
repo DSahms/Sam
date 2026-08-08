@@ -84,6 +84,10 @@ pub fn run() {
             app::touch_activity,
             app::lock_policy_get,
             app::lock_policy_set,
+            app::vault_backup,
+            app::vault_restore_passphrase,
+            app::vault_restore_recovery,
+            app::vault_backup_preview,
         ])
         .setup(|app| {
             // Periodic inactivity-lock checker: a native thread ticks every 30

@@ -297,6 +297,69 @@ pub fn lock_policy_set(
     state.set_lock_policy(policy)
 }
 
+/// Back up the active vault to a user-selected path. Requires the passphrase
+/// and a recovery code (the package is openable with either).
+#[tauri::command]
+pub fn vault_backup(
+    state: tauri::State<AppState>,
+    vault_id: String,
+    passphrase: String,
+    recovery_code: String,
+    out_path: String,
+) -> AppResult<()> {
+    let id = VaultId::parse(&vault_id)?;
+    let recovery = RecoveryCode::parse(&recovery_code).map_err(|_| AppError::Crypto)?;
+    state.with_registry(|reg| {
+        reg.backup(
+            id,
+            passphrase.as_bytes(),
+            &recovery,
+            std::path::Path::new(&out_path),
+        )
+    })??;
+    Ok(())
+}
+
+/// Restore a backup package using the passphrase. The restored vault becomes
+/// available in the vault list (it is not auto-unlocked).
+#[tauri::command]
+pub fn vault_restore_passphrase(
+    state: tauri::State<AppState>,
+    in_path: String,
+    passphrase: String,
+) -> AppResult<String> {
+    let id = state.with_registry(|reg| {
+        reg.restore_from_passphrase(std::path::Path::new(&in_path), passphrase.as_bytes())
+    })??;
+    Ok(id.to_string())
+}
+
+/// Restore a backup package using the recovery code.
+#[tauri::command]
+pub fn vault_restore_recovery(
+    state: tauri::State<AppState>,
+    in_path: String,
+    recovery_code: String,
+) -> AppResult<String> {
+    let code = RecoveryCode::parse(&recovery_code).map_err(|_| AppError::Crypto)?;
+    let id = state.with_registry(|reg| {
+        reg.restore_from_recovery(std::path::Path::new(&in_path), &code)
+    })??;
+    Ok(id.to_string())
+}
+
+/// Read a backup's header for restore preview (vault name, id, created date).
+#[tauri::command]
+pub fn vault_backup_preview(in_path: String) -> AppResult<serde_json::Value> {
+    let h = crate::backup::read_header(std::path::Path::new(&in_path))?;
+    Ok(serde_json::json!({
+        "format_version": h.format_version,
+        "vault_id": h.vault_id,
+        "vault_name": h.vault_name,
+        "created_at": h.created_at,
+    }))
+}
+
 // Suppress unused import warning when RecoveryCode import is only used in type.
 #[allow(unused_imports)]
 use RecoveryCode as _RecoveryCode;

@@ -1,7 +1,7 @@
 {
   "project": "Sammy",
-  "current_phase": "Phase 1 in progress (vault spine + functional UI)",
-  "status": "phase_1_core_and_ui_verified",
+  "current_phase": "Phase 1 in progress (vault spine + functional UI + backup)",
+  "status": "phase_1_backup_verified",
   "completed_capabilities": [
     "workspace_cargo_build",
     "frontend_vite_build",
@@ -28,11 +28,16 @@
     "audit_append_only_api",
     "lock_inactivity_watchdog",
     "lock_policy_commands",
-    "frontend_vaults_view_functional"
+    "frontend_vaults_view_functional",
+    "backup_create_encrypted_package",
+    "backup_restore_with_passphrase",
+    "backup_restore_with_recovery",
+    "backup_integrity_verification",
+    "backup_tauri_commands_wired"
   ],
   "active_work": [
-    "phase_1_backup_restore",
-    "phase_1_windows_session_lock_hook"
+    "phase_1_windows_session_lock_hook",
+    "phase_2_identity_and_providers"
   ],
   "known_failures": [],
   "external_blockers": [
@@ -46,11 +51,10 @@
   "security_debt": [
     "windows_session_lock_not_hooked_only_inactivity_check",
     "audit_events_not_recorded_by_any_command_yet",
-    "backup_restore_not_implemented",
     "phase_2_through_8_subsystems_are_stubs"
   ],
   "test_summary": {
-    "rust_unit": { "passed": 56, "failed": 0, "ignored": 0 },
+    "rust_unit": { "passed": 64, "failed": 0, "ignored": 0 },
     "rust_integration": { "passed": 4, "failed": 0, "ignored": 0 },
     "frontend": { "passed": 6, "failed": 0, "ignored": 0 },
     "fmt_check": "pass",
@@ -59,11 +63,11 @@
     "prettier": "pass",
     "tsc_strict": "pass"
   },
-  "last_verified_commit": "2438865",
+  "last_verified_commit": "pending_backup_commit",
   "next_actions": [
-    "implement initial full encrypted backup + restore (§30/§31)",
     "hook Windows session-lock signal to lock vault",
-    "begin Phase 2: identity, conversation model, mock/KoboldCpp/Venice providers"
+    "begin Phase 2: identity, conversation model, mock/KoboldCpp/Venice providers",
+    "wire backup UI into BackupRecoveryView"
   ],
   "updated_at": "2026-08-05T11:45:00Z"
 }
