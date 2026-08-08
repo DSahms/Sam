@@ -108,6 +108,18 @@ export const api = {
   identityGet: () => invoke<CompanionIdentity>("identity_get"),
   identitySave: (identity: CompanionIdentity, editSummary: string) =>
     invoke<void>("identity_save", { identity, editSummary }),
+
+  // Knowledge
+  knowledgeList: () => invoke<KnowledgeRecordView[]>("knowledge_list"),
+  knowledgeAddFact: (text: string) => invoke<string>("knowledge_add_fact", { text }),
+  knowledgeApprove: (recordId: string) => invoke<void>("knowledge_approve", { recordId }),
+  knowledgeReject: (recordId: string) => invoke<void>("knowledge_reject", { recordId }),
+  knowledgeTombstone: (recordId: string) =>
+    invoke<void>("knowledge_tombstone", { recordId }),
+  knowledgeCorrect: (recordId: string, newText: string) =>
+    invoke<string>("knowledge_correct", { recordId, newText }),
+  knowledgeSearch: (query: string, limit?: number) =>
+    invoke<string[]>("knowledge_search", { query, limit: limit ?? 20 }),
 };
 
 export type LockPolicy =
@@ -198,3 +210,20 @@ export const VAULT_TEMPLATE_LABELS: Record<VaultTemplate, string> = {
   consigliere: "Consigliere",
   custom: "Custom",
 };
+
+export interface KnowledgeRecordView {
+  record_id: string;
+  record_type: string;
+  canonical_text: string;
+  status: string;
+  review_state: string;
+  sensitivity: string;
+  confidence: number;
+  domain_tags: string[];
+  source_ids: string[];
+  supersedes: string | null;
+  superseded_by: string | null;
+  contradiction_set: string | null;
+  created_at: string;
+  updated_at: string;
+}

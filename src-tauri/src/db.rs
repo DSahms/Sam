@@ -85,6 +85,47 @@ pub const MIGRATIONS: &[Migration] = &[
                 status      TEXT NOT NULL DEFAULT 'active'
               );",
     },
+    // Version 5: full knowledge record schema (Phase 3). The v2 table is basic;
+    // this adds the columns required by directive §17 and an FTS5 virtual table
+    // for lexical search over current (non-tombstoned) records.
+    Migration {
+        version: 5,
+        description: "knowledge record full schema + FTS5",
+        sql: "CREATE TABLE IF NOT EXISTS knowledge_records_full (
+                record_id        TEXT PRIMARY KEY,
+                vault_id         TEXT NOT NULL,
+                record_type      TEXT NOT NULL,
+                canonical_text   TEXT NOT NULL,
+                status           TEXT NOT NULL,
+                source_ids       TEXT NOT NULL DEFAULT '[]',
+                source_locations TEXT NOT NULL DEFAULT '[]',
+                provenance       TEXT NOT NULL DEFAULT '{}',
+                confidence       REAL NOT NULL DEFAULT 0.0,
+                sensitivity      TEXT NOT NULL DEFAULT 'normal',
+                permissions      TEXT NOT NULL DEFAULT '[]',
+                domain_tags      TEXT NOT NULL DEFAULT '[]',
+                routing_tags     TEXT NOT NULL DEFAULT '[]',
+                created_at       TEXT NOT NULL,
+                updated_at       TEXT NOT NULL,
+                valid_from       TEXT,
+                valid_to         TEXT,
+                supersedes       TEXT,
+                superseded_by    TEXT,
+                review_state     TEXT NOT NULL DEFAULT 'candidate',
+                reviewed_by      TEXT,
+                reviewed_at      TEXT,
+                contradiction_set TEXT,
+                schema_version   INTEGER NOT NULL DEFAULT 1
+              );
+              CREATE INDEX IF NOT EXISTS kr_full_status ON knowledge_records_full(status);
+              CREATE INDEX IF NOT EXISTS kr_full_type ON knowledge_records_full(record_type);
+              CREATE INDEX IF NOT EXISTS kr_full_review ON knowledge_records_full(review_state);
+              CREATE INDEX IF NOT EXISTS kr_full_sensitivity ON knowledge_records_full(sensitivity);
+              CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+                record_id UNINDEXED, canonical_text, content='knowledge_records_full',
+                content_rowid='rowid'
+              );",
+    },
 ];
 
 /// The highest migration version defined.

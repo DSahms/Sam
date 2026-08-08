@@ -98,6 +98,13 @@ pub fn run() {
             app::chat_send,
             app::identity_get,
             app::identity_save,
+            app::knowledge_list,
+            app::knowledge_add_fact,
+            app::knowledge_approve,
+            app::knowledge_reject,
+            app::knowledge_tombstone,
+            app::knowledge_correct,
+            app::knowledge_search,
         ])
         .setup(|app| {
             // Periodic lock checker: a native thread ticks every 15 seconds and

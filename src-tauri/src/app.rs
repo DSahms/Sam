@@ -542,6 +542,151 @@ pub fn identity_save(
     })?
 }
 
+// -----------------------------------------------------------------------------
+// Knowledge commands
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct KnowledgeRecordView {
+    pub record_id: String,
+    pub record_type: String,
+    pub canonical_text: String,
+    pub status: String,
+    pub review_state: String,
+    pub sensitivity: String,
+    pub confidence: f64,
+    pub domain_tags: Vec<String>,
+    pub source_ids: Vec<String>,
+    pub supersedes: Option<String>,
+    pub superseded_by: Option<String>,
+    pub contradiction_set: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<&crate::knowledge::KnowledgeRecord> for KnowledgeRecordView {
+    fn from(r: &crate::knowledge::KnowledgeRecord) -> Self {
+        Self {
+            record_id: r.record_id.clone(),
+            record_type: r.record_type.clone(),
+            canonical_text: r.canonical_text.clone(),
+            status: r.status.clone(),
+            review_state: r.review_state.clone(),
+            sensitivity: r.sensitivity.clone(),
+            confidence: r.confidence,
+            domain_tags: r.domain_tags.clone(),
+            source_ids: r.source_ids.clone(),
+            supersedes: r.supersedes.clone(),
+            superseded_by: r.superseded_by.clone(),
+            contradiction_set: r.contradiction_set.clone(),
+            created_at: r.created_at.clone(),
+            updated_at: r.updated_at.clone(),
+        }
+    }
+}
+
+/// List all knowledge records (What I Know management view).
+#[tauri::command]
+pub fn knowledge_list(
+    state: tauri::State<AppState>,
+) -> AppResult<Vec<KnowledgeRecordView>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let all = crate::knowledge::list_all(&conn)?;
+        Ok(all.iter().map(KnowledgeRecordView::from).collect())
+    })?
+}
+
+/// Add a manually-entered approved fact.
+#[tauri::command]
+pub fn knowledge_add_fact(
+    state: tauri::State<AppState>,
+    text: String,
+) -> AppResult<String> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let id = crate::knowledge::create(
+            &conn,
+            &v.vault_id.to_string(),
+            &crate::knowledge::NewRecord::approved_fact(text),
+        )?;
+        Ok(id.to_string())
+    })?
+}
+
+/// Approve a candidate record.
+#[tauri::command]
+pub fn knowledge_approve(
+    state: tauri::State<AppState>,
+    record_id: String,
+) -> AppResult<()> {
+    let id = crate::ids::RecordId::parse(&record_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::knowledge::approve(&conn, id, "owner")
+    })?
+}
+
+/// Reject a candidate record.
+#[tauri::command]
+pub fn knowledge_reject(
+    state: tauri::State<AppState>,
+    record_id: String,
+) -> AppResult<()> {
+    let id = crate::ids::RecordId::parse(&record_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::knowledge::reject(&conn, id, "owner")
+    })?
+}
+
+/// Tombstone a record.
+#[tauri::command]
+pub fn knowledge_tombstone(
+    state: tauri::State<AppState>,
+    record_id: String,
+) -> AppResult<()> {
+    let id = crate::ids::RecordId::parse(&record_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::knowledge::tombstone(&conn, id)
+    })?
+}
+
+/// Correct (supersede) a record with new text.
+#[tauri::command]
+pub fn knowledge_correct(
+    state: tauri::State<AppState>,
+    record_id: String,
+    new_text: String,
+) -> AppResult<String> {
+    let id = crate::ids::RecordId::parse(&record_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let new_id = crate::knowledge::correct(
+            &conn,
+            &v.vault_id.to_string(),
+            id,
+            new_text,
+            "owner",
+        )?;
+        Ok(new_id.to_string())
+    })?
+}
+
+/// Lexical search over current knowledge.
+#[tauri::command]
+pub fn knowledge_search(
+    state: tauri::State<AppState>,
+    query: String,
+    limit: Option<u32>,
+) -> AppResult<Vec<String>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::knowledge::search_current(&conn, &query, limit.unwrap_or(20))
+    })?
+}
+
 // Suppress unused import warning when RecoveryCode import is only used in type.
 #[allow(unused_imports)]
 use RecoveryCode as _RecoveryCode;
