@@ -18,6 +18,7 @@
 
 pub mod audit;
 pub mod backup;
+pub mod chat;
 pub mod citations;
 pub mod conversation;
 pub mod corpus;
