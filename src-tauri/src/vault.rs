@@ -207,6 +207,7 @@ impl VaultRegistry {
             name: manifest.name.clone(),
             template: manifest.template,
             conn: Mutex::new(conn),
+            dek,
         })
     }
 
@@ -337,6 +338,9 @@ pub struct Vault {
     pub name: String,
     pub template: VaultTemplate,
     conn: Mutex<Connection>,
+    /// The vault data-encryption key, held in memory for the session lifetime
+    /// only. Used to encrypt/decrypt source files. Never sent to the frontend.
+    dek: SecretKey,
 }
 
 impl std::fmt::Debug for Vault {
@@ -354,6 +358,11 @@ impl Vault {
     /// (SQLite handles are not `Sync`).
     pub fn lock_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.conn.lock().expect("vault connection poisoned")
+    }
+
+    /// Borrow the vault data-encryption key (for source/file encryption).
+    pub fn dek(&self) -> &SecretKey {
+        &self.dek
     }
 
     /// Best-effort: re-key the database's encryption key. Phase 1 does not yet

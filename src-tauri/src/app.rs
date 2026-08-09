@@ -687,6 +687,97 @@ pub fn knowledge_search(
     })?
 }
 
+// -----------------------------------------------------------------------------
+// Source commands (Phase 4)
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct SourceView {
+    pub source_id: String,
+    pub kind: String,
+    pub name: String,
+    pub checksum: String,
+    pub imported_at: String,
+    pub status: String,
+    pub bytes_len: u64,
+}
+
+impl From<&crate::sources::SourceRecord> for SourceView {
+    fn from(s: &crate::sources::SourceRecord) -> Self {
+        Self {
+            source_id: s.source_id.clone(),
+            kind: s.kind.clone(),
+            name: s.name.clone(),
+            checksum: s.checksum.clone(),
+            imported_at: s.imported_at.clone(),
+            status: s.status.clone(),
+            bytes_len: s.bytes_len,
+        }
+    }
+}
+
+/// Import a source file. The path comes from the Tauri file dialog (owner-
+/// selected; no arbitrary scanning — directive §27). The file is encrypted at
+/// rest with the vault DEK.
+#[tauri::command]
+pub fn source_import(
+    state: tauri::State<AppState>,
+    file_path: String,
+) -> AppResult<String> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let id =
+            crate::sources::import(&conn, v.dek(), std::path::Path::new(&file_path))?;
+        Ok(id.to_string())
+    })?
+}
+
+/// List all sources in the active vault.
+#[tauri::command]
+pub fn source_list(state: tauri::State<AppState>) -> AppResult<Vec<SourceView>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let all = crate::sources::list(&conn)?;
+        Ok(all.iter().map(SourceView::from).collect())
+    })?
+}
+
+/// Get the extracted text of a source.
+#[tauri::command]
+pub fn source_extracted(
+    state: tauri::State<AppState>,
+    source_id: String,
+) -> AppResult<String> {
+    let id = crate::ids::SourceId::parse(&source_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::sources::extracted_text(&conn, id)
+    })?
+}
+
+/// Delete (soft-delete) a source.
+#[tauri::command]
+pub fn source_delete(state: tauri::State<AppState>, source_id: String) -> AppResult<()> {
+    let id = crate::ids::SourceId::parse(&source_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::sources::delete(&conn, id)
+    })?
+}
+
+/// Lexical search over source extracted text.
+#[tauri::command]
+pub fn source_search(
+    state: tauri::State<AppState>,
+    query: String,
+    limit: Option<u32>,
+) -> AppResult<Vec<String>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::sources::search(&conn, &query, limit.unwrap_or(20))
+    })?
+}
+
 // Suppress unused import warning when RecoveryCode import is only used in type.
 #[allow(unused_imports)]
 use RecoveryCode as _RecoveryCode;

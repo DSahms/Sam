@@ -105,6 +105,11 @@ pub fn run() {
             app::knowledge_tombstone,
             app::knowledge_correct,
             app::knowledge_search,
+            app::source_import,
+            app::source_list,
+            app::source_extracted,
+            app::source_delete,
+            app::source_search,
         ])
         .setup(|app| {
             // Periodic lock checker: a native thread ticks every 15 seconds and

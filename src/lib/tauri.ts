@@ -120,6 +120,14 @@ export const api = {
     invoke<string>("knowledge_correct", { recordId, newText }),
   knowledgeSearch: (query: string, limit?: number) =>
     invoke<string[]>("knowledge_search", { query, limit: limit ?? 20 }),
+
+  // Sources
+  sourceImport: (filePath: string) => invoke<string>("source_import", { filePath }),
+  sourceList: () => invoke<SourceView[]>("source_list"),
+  sourceExtracted: (sourceId: string) => invoke<string>("source_extracted", { sourceId }),
+  sourceDelete: (sourceId: string) => invoke<void>("source_delete", { sourceId }),
+  sourceSearch: (query: string, limit?: number) =>
+    invoke<string[]>("source_search", { query, limit: limit ?? 20 }),
 };
 
 export type LockPolicy =
@@ -226,4 +234,14 @@ export interface KnowledgeRecordView {
   contradiction_set: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SourceView {
+  source_id: string;
+  kind: string;
+  name: string;
+  checksum: string;
+  imported_at: string;
+  status: string;
+  bytes_len: number;
 }

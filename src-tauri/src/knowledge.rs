@@ -445,13 +445,18 @@ pub fn search_current(
     query: &str,
     limit: u32,
 ) -> AppResult<Vec<String>> {
+    // Sanitize into a phrase query so special characters in user input are
+    // treated literally, not as FTS5 operators.
+    let sanitized = query.replace('"', "\"\"");
+    let phrase = format!("\"{sanitized}\"");
     let mut stmt = conn.prepare(
         "SELECT k.record_id FROM knowledge_fts f
          JOIN knowledge_records_full k ON k.record_id = f.record_id
          WHERE knowledge_fts MATCH ?1 AND k.status IN ('approved','disputed')
          ORDER BY rank LIMIT ?2",
     )?;
-    let rows = stmt.query_map(params![query, limit], |r| r.get::<_, String>(0))?;
+    let rows =
+        stmt.query_map(params![phrase.as_str(), limit], |r| r.get::<_, String>(0))?;
     let mut out = Vec::new();
     for r in rows {
         out.push(r?);
@@ -631,5 +636,22 @@ mod tests {
         create(&c, "v1", &NewRecord::approved_fact("a")).unwrap();
         create(&c, "v1", &NewRecord::candidate(RecordType::Fact, "b")).unwrap();
         assert_eq!(list_all(&c).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn search_handles_special_characters_in_query() {
+        // Regression: FTS5 treats hyphens/parens as operators; the search must
+        // sanitize the query into a phrase so special chars match literally.
+        let c = fresh_conn();
+        let id = create(
+            &c,
+            "v1",
+            &NewRecord::approved_fact("ticket PROJ-123 (urgent)"),
+        )
+        .unwrap();
+        let hits = search_current(&c, "PROJ-123", 10).unwrap();
+        assert!(hits.contains(&id.to_string()));
+        let hits2 = search_current(&c, "(urgent)", 10).unwrap();
+        assert!(hits2.contains(&id.to_string()));
     }
 }
