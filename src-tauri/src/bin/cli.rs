@@ -29,14 +29,54 @@ fn main() -> ExitCode {
             print!("{HELP}");
             ExitCode::SUCCESS
         }
-        Some("corpus") => {
-            // Phase 6 implements the real validator.
-            eprintln!("sammy-cli: 'corpus' is not implemented until Phase 6");
-            ExitCode::from(2)
-        }
+        Some("corpus") => corpus_main(&args[2..]),
         Some(other) => {
             eprintln!("sammy-cli: unknown subcommand '{other}'");
             eprintln!("\n{HELP}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `sammy-cli corpus validate <package>` — validates a Sammy corpus export
+/// package against the documented schema (directive §21). Returns exit 0 on
+/// success, 1 on validation failure, 2 on usage error.
+fn corpus_main(args: &[String]) -> ExitCode {
+    match args.first().map(String::as_str) {
+        Some("validate") => {
+            let path = match args.get(1) {
+                Some(p) => p,
+                None => {
+                    eprintln!("usage: sammy-cli corpus validate <package.json>");
+                    return ExitCode::from(2);
+                }
+            };
+            let bytes = match std::fs::read(path) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("sammy-cli: cannot read {path}: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            match sammy_lib::corpus::validate_package_bytes(&bytes) {
+                Ok(()) => {
+                    println!("valid: {path}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("invalid: {path}: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Some(other) => {
+            eprintln!("sammy-cli corpus: unknown subcommand '{other}'");
+            eprintln!("  usage: sammy-cli corpus validate <package.json>");
+            ExitCode::from(2)
+        }
+        None => {
+            eprintln!("sammy-cli corpus: missing subcommand");
+            eprintln!("  usage: sammy-cli corpus validate <package.json>");
             ExitCode::from(2)
         }
     }

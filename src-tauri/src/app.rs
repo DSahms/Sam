@@ -778,6 +778,37 @@ pub fn source_search(
     })?
 }
 
+// -----------------------------------------------------------------------------
+// Corpus commands (Phase 6)
+// -----------------------------------------------------------------------------
+
+/// Export the active vault's knowledge records to a corpus package file.
+#[tauri::command]
+pub fn corpus_export(state: tauri::State<AppState>, out_path: String) -> AppResult<()> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let pkg = crate::corpus::export_full(&conn, &v.vault_id.to_string(), &v.name)?;
+        let bytes = crate::corpus::package_to_json(&pkg)?;
+        std::fs::write(std::path::Path::new(&out_path), bytes)?;
+        Ok(())
+    })?
+}
+
+/// Import a corpus package file into the active vault (idempotent upsert).
+#[tauri::command]
+pub fn corpus_import(
+    state: tauri::State<AppState>,
+    in_path: String,
+) -> AppResult<String> {
+    state.with_active(|v| {
+        let bytes = std::fs::read(std::path::Path::new(&in_path))?;
+        let pkg = crate::corpus::package_from_json(&bytes)?;
+        let conn = v.lock_conn();
+        let outcome = crate::corpus::import(&conn, &v.vault_id.to_string(), &pkg)?;
+        Ok(serde_json::to_string(&outcome)?)
+    })?
+}
+
 // Suppress unused import warning when RecoveryCode import is only used in type.
 #[allow(unused_imports)]
 use RecoveryCode as _RecoveryCode;

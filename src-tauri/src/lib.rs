@@ -110,6 +110,8 @@ pub fn run() {
             app::source_extracted,
             app::source_delete,
             app::source_search,
+            app::corpus_export,
+            app::corpus_import,
         ])
         .setup(|app| {
             // Periodic lock checker: a native thread ticks every 15 seconds and

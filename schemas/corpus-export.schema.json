@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sammy.app/schemas/corpus-export.schema.json",
+  "title": "Sammy corpus export package",
+  "description": "A complete Sammy corpus export package: manifest + records array (directive §20).",
+  "type": "object",
+  "required": ["manifest", "records"],
+  "properties": {
+    "manifest": { "$ref": "corpus-manifest.schema.json" },
+    "records": {
+      "type": "array",
+      "items": { "$ref": "corpus-record.schema.json" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sammy.app/schemas/corpus-manifest.schema.json",
+  "title": "Sammy corpus package manifest",
+  "description": "Manifest describing a Sammy corpus export/import package (directive §20).",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "package_type",
+    "vault_id",
+    "created_at",
+    "app_version",
+    "record_schema_version",
+    "record_count",
+    "checksum"
+  ],
+  "properties": {
+    "manifest_version": { "type": "integer", "minimum": 1 },
+    "package_type": { "type": "string", "enum": ["full", "incremental"] },
+    "vault_id": { "type": "string" },
+    "vault_name": { "type": "string" },
+    "created_at": { "type": "string" },
+    "app_version": { "type": "string" },
+    "record_schema_version": { "type": "integer", "minimum": 1 },
+    "record_count": { "type": "integer", "minimum": 0 },
+    "source_count": { "type": "integer", "minimum": 0 },
+    "checksum": { "type": "string", "description": "SHA-256 of the records JSON array, hex-encoded." },
+    "previous_package_checksum": { "type": ["string", "null"], "description": "For incremental packages: the checksum of the previous package this builds on." }
+  },
+  "additionalProperties": false
+}
