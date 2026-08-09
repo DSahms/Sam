@@ -112,6 +112,12 @@ pub fn run() {
             app::source_search,
             app::corpus_export,
             app::corpus_import,
+            app::memory_list,
+            app::memory_approve,
+            app::memory_reject,
+            app::memory_defer,
+            app::memory_mark_temporary,
+            app::memory_delete,
         ])
         .setup(|app| {
             // Periodic lock checker: a native thread ticks every 15 seconds and

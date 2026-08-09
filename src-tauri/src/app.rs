@@ -809,6 +809,136 @@ pub fn corpus_import(
     })?
 }
 
+// -----------------------------------------------------------------------------
+// Memory candidate commands (Phase 7)
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct MemoryCandidateView {
+    pub candidate_id: String,
+    pub proposed_text: String,
+    pub record_type: String,
+    pub source_conversation_id: Option<String>,
+    pub source_message_id: Option<String>,
+    pub reason: String,
+    pub confidence: f64,
+    pub sensitivity: String,
+    pub suggested_domain: String,
+    pub provider_used: String,
+    pub crossed_to_cloud: bool,
+    pub created_at: String,
+    pub state: String,
+}
+
+impl From<&crate::memory::MemoryCandidate> for MemoryCandidateView {
+    fn from(m: &crate::memory::MemoryCandidate) -> Self {
+        Self {
+            candidate_id: m.candidate_id.clone(),
+            proposed_text: m.proposed_text.clone(),
+            record_type: m.record_type.clone(),
+            source_conversation_id: m.source_conversation_id.clone(),
+            source_message_id: m.source_message_id.clone(),
+            reason: m.reason.clone(),
+            confidence: m.confidence,
+            sensitivity: m.sensitivity.clone(),
+            suggested_domain: m.suggested_domain.clone(),
+            provider_used: m.provider_used.clone(),
+            crossed_to_cloud: m.crossed_to_cloud,
+            created_at: m.created_at.clone(),
+            state: m.state.clone(),
+        }
+    }
+}
+
+/// List memory candidates, optionally filtered by state.
+#[tauri::command]
+pub fn memory_list(
+    state: tauri::State<AppState>,
+    state_filter: Option<String>,
+) -> AppResult<Vec<MemoryCandidateView>> {
+    let filter = state_filter
+        .as_deref()
+        .and_then(crate::memory::CandidateState::parse);
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let list = crate::memory::list(&conn, filter)?;
+        Ok(list.iter().map(MemoryCandidateView::from).collect())
+    })?
+}
+
+/// Approve a candidate (optionally with edited text), promoting it to an
+/// approved knowledge record.
+#[tauri::command]
+pub fn memory_approve(
+    state: tauri::State<AppState>,
+    candidate_id: String,
+    edited_text: Option<String>,
+) -> AppResult<String> {
+    let id = crate::ids::MemoryCandidateId::parse(&candidate_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let kid = crate::memory::approve(
+            &conn,
+            &v.vault_id.to_string(),
+            id,
+            edited_text.as_deref(),
+        )?;
+        Ok(kid)
+    })?
+}
+
+/// Reject a candidate.
+#[tauri::command]
+pub fn memory_reject(
+    state: tauri::State<AppState>,
+    candidate_id: String,
+) -> AppResult<()> {
+    let id = crate::ids::MemoryCandidateId::parse(&candidate_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::memory::reject(&conn, id)
+    })?
+}
+
+/// Defer a candidate.
+#[tauri::command]
+pub fn memory_defer(
+    state: tauri::State<AppState>,
+    candidate_id: String,
+) -> AppResult<()> {
+    let id = crate::ids::MemoryCandidateId::parse(&candidate_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::memory::defer(&conn, id)
+    })?
+}
+
+/// Mark a candidate temporary.
+#[tauri::command]
+pub fn memory_mark_temporary(
+    state: tauri::State<AppState>,
+    candidate_id: String,
+) -> AppResult<()> {
+    let id = crate::ids::MemoryCandidateId::parse(&candidate_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::memory::mark_temporary(&conn, id)
+    })?
+}
+
+/// Delete a candidate.
+#[tauri::command]
+pub fn memory_delete(
+    state: tauri::State<AppState>,
+    candidate_id: String,
+) -> AppResult<()> {
+    let id = crate::ids::MemoryCandidateId::parse(&candidate_id)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::memory::delete(&conn, id)
+    })?
+}
+
 // Suppress unused import warning when RecoveryCode import is only used in type.
 #[allow(unused_imports)]
 use RecoveryCode as _RecoveryCode;
