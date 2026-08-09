@@ -939,6 +939,54 @@ pub fn memory_delete(
     })?
 }
 
+// -----------------------------------------------------------------------------
+// Permission + tool commands (Phase 8)
+// -----------------------------------------------------------------------------
+
+/// List the tool registry (static declarations for action previews).
+#[tauri::command]
+pub fn tool_registry() -> Vec<crate::permissions::ToolDeclaration> {
+    crate::tools::registry()
+}
+
+/// List active (non-revoked, non-expired) permission grants.
+#[tauri::command]
+pub fn permission_list_active(
+    state: tauri::State<AppState>,
+) -> AppResult<Vec<crate::permissions::PermissionGrant>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::permissions::list_active(&conn)
+    })?
+}
+
+/// Grant a permission for a tool.
+#[tauri::command]
+pub fn permission_grant(
+    state: tauri::State<AppState>,
+    tool_id: String,
+    mode: crate::permissions::PermissionMode,
+    scope: String,
+    expires_at: Option<String>,
+) -> AppResult<String> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::permissions::grant(&conn, &tool_id, mode, &scope, expires_at.as_deref())
+    })?
+}
+
+/// Revoke all grants for a tool. Immediate.
+#[tauri::command]
+pub fn permission_revoke(
+    state: tauri::State<AppState>,
+    tool_id: String,
+) -> AppResult<()> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::permissions::revoke(&conn, &tool_id)
+    })?
+}
+
 // Suppress unused import warning when RecoveryCode import is only used in type.
 #[allow(unused_imports)]
 use RecoveryCode as _RecoveryCode;
