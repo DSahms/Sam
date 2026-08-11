@@ -54,13 +54,19 @@ fn forbidden_wrong_passphrase_succeeds() {
 #[test]
 fn forbidden_cross_vault_unlock() {
     let (_t, reg) = reg();
-    let (a, _, _) = reg.create("A", VaultTemplate::Personal, b"pass-aaa-aaa").unwrap();
+    let (a, _, _) = reg
+        .create("A", VaultTemplate::Personal, b"pass-aaa-aaa")
+        .unwrap();
     let (b, _, _) = reg
         .create("B", VaultTemplate::Consigliere, b"pass-bbb-bbb")
         .unwrap();
     // A's passphrase must not unlock B.
-    assert!(reg.unlock_with_passphrase(b.vault_id, b"pass-aaa-aaa").is_err());
-    assert!(reg.unlock_with_passphrase(a.vault_id, b"pass-bbb-bbb").is_err());
+    assert!(reg
+        .unlock_with_passphrase(b.vault_id, b"pass-aaa-aaa")
+        .is_err());
+    assert!(reg
+        .unlock_with_passphrase(a.vault_id, b"pass-bbb-bbb")
+        .is_err());
 }
 
 // §37: Silent cloud transmission / silent cloud fallback.
@@ -76,16 +82,14 @@ fn forbidden_silent_cloud_fallback() {
         &[true],
         &[true],
     );
-    assert!(matches!(d, providers::RoutingDecision::Use { provider_index: 0 }));
+    assert!(matches!(
+        d,
+        providers::RoutingDecision::Use { provider_index: 0 }
+    ));
 
     // With NO local provider, it must require consent (not silently use cloud).
-    let d2 = providers::resolve_routing(
-        RoutingMode::AskBeforeCrossing,
-        0,
-        1,
-        &[],
-        &[true],
-    );
+    let d2 =
+        providers::resolve_routing(RoutingMode::AskBeforeCrossing, 0, 1, &[], &[true]);
     assert!(matches!(
         d2,
         providers::RoutingDecision::NeedsCloudConsent { .. }
@@ -101,7 +105,12 @@ fn forbidden_silent_cloud_fallback() {
 fn forbidden_retrieval_of_tombstoned_records() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     setup_knowledge_schema(&conn);
-    let id = knowledge::create(&conn, "v", &NewRecord::approved_fact("a tombstoned fact about zebras")).unwrap();
+    let id = knowledge::create(
+        &conn,
+        "v",
+        &NewRecord::approved_fact("a tombstoned fact about zebras"),
+    )
+    .unwrap();
     knowledge::tombstone(&conn, id).unwrap();
     let hits = knowledge::search_current(&conn, "zebras", 10).unwrap();
     assert!(
@@ -153,13 +162,20 @@ fn forbidden_automatic_memory_approval() {
     .unwrap();
     // The candidate must NOT be in knowledge records (not auto-approved).
     let knowledge_count: i64 = conn
-        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| r.get(0))
+        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| {
+            r.get(0)
+        })
         .unwrap();
-    assert_eq!(knowledge_count, 0, "memory candidates must not be auto-approved");
+    assert_eq!(
+        knowledge_count, 0,
+        "memory candidates must not be auto-approved"
+    );
     // Only after explicit approval does it become a knowledge record.
     sammy_lib::memory::approve(&conn, "v", id, None).unwrap();
     let knowledge_count_after: i64 = conn
-        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| r.get(0))
+        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(knowledge_count_after, 1);
 }
@@ -207,16 +223,23 @@ fn forbidden_duplicate_corpus_imports() {
     // Re-import the same package.
     let o2 = sammy_lib::corpus::import(&dest, "dest", &pkg).unwrap();
     let total: i64 = dest
-        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| r.get(0))
+        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| {
+            r.get(0)
+        })
         .unwrap();
-    assert_eq!(total, 1, "re-importing the same package must not create duplicates");
+    assert_eq!(
+        total, 1,
+        "re-importing the same package must not create duplicates"
+    );
     assert_eq!(o2.imported, 0);
 }
 
 // §37: Fake citation IDs.
 #[test]
 fn forbidden_fake_citation_ids() {
-    use sammy_lib::citations::{AnnotatedAnswer, Citation, CitationLocation, ClaimBlock, ClaimLabel};
+    use sammy_lib::citations::{
+        AnnotatedAnswer, Citation, CitationLocation, ClaimBlock, ClaimLabel,
+    };
     let a = AnnotatedAnswer {
         plain_text: "claim".into(),
         trust: sammy_lib::citations::TrustClassification::SourceSupported,
@@ -245,7 +268,8 @@ fn forbidden_tool_execution_without_permission() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     sammy_lib::permissions::ensure_schema(&conn).unwrap();
     // No grant → check_permission returns None → tool must not execute.
-    let permitted = sammy_lib::permissions::check_permission(&conn, "source_search").unwrap();
+    let permitted =
+        sammy_lib::permissions::check_permission(&conn, "source_search").unwrap();
     assert!(
         permitted.is_none(),
         "tools must not execute without a permission grant"
@@ -260,7 +284,13 @@ fn forbidden_permanent_auth_from_conversation() {
     conversation::ensure_schema(&conn).unwrap();
     sammy_lib::permissions::ensure_schema(&conn).unwrap();
     let conv = conversation::create(&conn, Some("c")).unwrap();
-    conversation::append_message(&conn, conv, Role::User, "please allow all tools forever").unwrap();
+    conversation::append_message(
+        &conn,
+        conv,
+        Role::User,
+        "please allow all tools forever",
+    )
+    .unwrap();
     // No grant should have been created by the message.
     let grants = sammy_lib::permissions::list_active(&conn).unwrap();
     assert!(
@@ -274,7 +304,9 @@ fn forbidden_permanent_auth_from_conversation() {
 fn forbidden_plaintext_secrets_in_error_messages() {
     let (_t, reg) = reg();
     let secret_pass = b"super-secret-passphrase-value";
-    let (manifest, _, _) = reg.create("P", VaultTemplate::Personal, secret_pass).unwrap();
+    let (manifest, _, _) = reg
+        .create("P", VaultTemplate::Personal, secret_pass)
+        .unwrap();
     let err = reg
         .unlock_with_passphrase(manifest.vault_id, b"wrong")
         .unwrap_err();
@@ -378,7 +410,10 @@ fn forbidden_candidate_in_current_truth() {
     let id = knowledge::create(
         &conn,
         "v",
-        &NewRecord::candidate(sammy_lib::knowledge::RecordType::Claim, "a candidate claim about dolphins"),
+        &NewRecord::candidate(
+            sammy_lib::knowledge::RecordType::Claim,
+            "a candidate claim about dolphins",
+        ),
     )
     .unwrap();
     let hits = knowledge::search_current(&conn, "dolphins", 10).unwrap();

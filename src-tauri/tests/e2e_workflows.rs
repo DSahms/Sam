@@ -6,7 +6,9 @@
 
 use sammy_lib::conversation::{self, Role};
 use sammy_lib::knowledge::{self, NewRecord};
-use sammy_lib::providers::{self, ChatRequest, MockProvider, Provider, ProviderMessage, RoutingMode};
+use sammy_lib::providers::{
+    self, ChatRequest, MockProvider, Provider, ProviderMessage, RoutingMode,
+};
 use sammy_lib::vault::{VaultRegistry, VaultTemplate};
 use tempfile::TempDir;
 
@@ -23,7 +25,11 @@ fn workflow_new_vault() {
     let (_t, reg) = fresh_reg();
     // Create
     let (manifest, _dek, recovery) = reg
-        .create("Personal", VaultTemplate::Personal, b"correct horse battery")
+        .create(
+            "Personal",
+            VaultTemplate::Personal,
+            b"correct horse battery",
+        )
         .unwrap();
     // Recovery code is available and parseable
     let recovery_str = recovery.to_human_string();
@@ -57,11 +63,17 @@ fn workflow_new_vault() {
     // (vault drops here, simulating lock)
     drop(vault);
     // Reopen with recovery code
-    let vault2 = reg.unlock_with_recovery(manifest.vault_id, &parsed).unwrap();
+    let vault2 = reg
+        .unlock_with_recovery(manifest.vault_id, &parsed)
+        .unwrap();
     let conn2 = vault2.lock_conn();
     conversation::ensure_schema(&conn2).unwrap();
     let msgs = conversation::messages(&conn2, conv).unwrap();
-    assert_eq!(msgs.len(), 2, "conversation should persist across lock/unlock");
+    assert_eq!(
+        msgs.len(),
+        2,
+        "conversation should persist across lock/unlock"
+    );
 }
 
 // §36: Recovery
@@ -73,27 +85,40 @@ fn workflow_recovery() {
         .create("Personal", VaultTemplate::Personal, b"master-pass")
         .unwrap();
     // Populate with knowledge
-    let vault = reg.unlock_with_passphrase(manifest.vault_id, b"master-pass").unwrap();
+    let vault = reg
+        .unlock_with_passphrase(manifest.vault_id, b"master-pass")
+        .unwrap();
     {
         let conn = vault.lock_conn();
-        knowledge::create(&conn, &manifest.vault_id.to_string(), &NewRecord::approved_fact("earth is round")).unwrap();
+        knowledge::create(
+            &conn,
+            &manifest.vault_id.to_string(),
+            &NewRecord::approved_fact("earth is round"),
+        )
+        .unwrap();
     }
     drop(vault);
 
     // Back up
     let backup_dir = TempDir::new().unwrap();
     let pkg = backup_dir.path().join("backup.sammy-backup");
-    reg.backup(manifest.vault_id, b"master-pass", &recovery, &pkg).unwrap();
+    reg.backup(manifest.vault_id, b"master-pass", &recovery, &pkg)
+        .unwrap();
 
     // Restore into a NEW registry (simulates replacement computer)
     let (_t2, reg2) = fresh_reg();
     let restored_id = reg2.restore_from_passphrase(&pkg, b"master-pass").unwrap();
     assert_eq!(restored_id, manifest.vault_id);
     // Verify knowledge survived
-    let v = reg2.unlock_with_passphrase(restored_id, b"master-pass").unwrap();
+    let v = reg2
+        .unlock_with_passphrase(restored_id, b"master-pass")
+        .unwrap();
     let conn = v.lock_conn();
     let hits = knowledge::search_current(&conn, "earth", 10).unwrap();
-    assert!(!hits.is_empty(), "restored vault should contain the knowledge record");
+    assert!(
+        !hits.is_empty(),
+        "restored vault should contain the knowledge record"
+    );
 
     // Restore with recovery code into another registry
     let (_t3, reg3) = fresh_reg();
@@ -110,40 +135,75 @@ fn workflow_multiple_vaults() {
         .create("Personal", VaultTemplate::Personal, b"pass-personal")
         .unwrap();
     let (consigliere, _, _) = reg
-        .create("Consigliere", VaultTemplate::Consigliere, b"pass-consigliere")
+        .create(
+            "Consigliere",
+            VaultTemplate::Consigliere,
+            b"pass-consigliere",
+        )
         .unwrap();
 
     // Add different knowledge to each
-    let vp = reg.unlock_with_passphrase(personal.vault_id, b"pass-personal").unwrap();
+    let vp = reg
+        .unlock_with_passphrase(personal.vault_id, b"pass-personal")
+        .unwrap();
     {
         let conn = vp.lock_conn();
-        knowledge::create(&conn, &personal.vault_id.to_string(), &NewRecord::approved_fact("personal fact about hobbies")).unwrap();
+        knowledge::create(
+            &conn,
+            &personal.vault_id.to_string(),
+            &NewRecord::approved_fact("personal fact about hobbies"),
+        )
+        .unwrap();
     }
     drop(vp);
 
-    let vc = reg.unlock_with_passphrase(consigliere.vault_id, b"pass-consigliere").unwrap();
+    let vc = reg
+        .unlock_with_passphrase(consigliere.vault_id, b"pass-consigliere")
+        .unwrap();
     {
         let conn = vc.lock_conn();
-        knowledge::create(&conn, &consigliere.vault_id.to_string(), &NewRecord::approved_fact("consigliere fact about strategy")).unwrap();
+        knowledge::create(
+            &conn,
+            &consigliere.vault_id.to_string(),
+            &NewRecord::approved_fact("consigliere fact about strategy"),
+        )
+        .unwrap();
     }
     drop(vc);
 
     // Verify no cross-vault search (each vault only sees its own records)
     {
-        let vp2 = reg.unlock_with_passphrase(personal.vault_id, b"pass-personal").unwrap();
+        let vp2 = reg
+            .unlock_with_passphrase(personal.vault_id, b"pass-personal")
+            .unwrap();
         let conn = vp2.lock_conn();
         let p_hits = knowledge::search_current(&conn, "hobbies", 10).unwrap();
         assert!(!p_hits.is_empty());
         let c_hits = knowledge::search_current(&conn, "strategy", 10).unwrap();
-        assert!(c_hits.is_empty(), "personal vault must not see consigliere records");
+        assert!(
+            c_hits.is_empty(),
+            "personal vault must not see consigliere records"
+        );
     }
 
     // Back up each separately
     let dir = TempDir::new().unwrap();
     let recovery_p = sammy_lib::crypto::recovery::RecoveryCode::generate();
-    reg.backup(personal.vault_id, b"pass-personal", &recovery_p, &dir.path().join("p.bak")).unwrap();
+    reg.backup(
+        personal.vault_id,
+        b"pass-personal",
+        &recovery_p,
+        &dir.path().join("p.bak"),
+    )
+    .unwrap();
     let recovery_c = sammy_lib::crypto::recovery::RecoveryCode::generate();
-    reg.backup(consigliere.vault_id, b"pass-consigliere", &recovery_c, &dir.path().join("c.bak")).unwrap();
+    reg.backup(
+        consigliere.vault_id,
+        b"pass-consigliere",
+        &recovery_c,
+        &dir.path().join("c.bak"),
+    )
+    .unwrap();
 }
 
 // §36: Source-grounded answer
@@ -174,8 +234,18 @@ fn workflow_source_grounded_answer() {
 fn workflow_corpus_package() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     setup_knowledge_schema(&conn);
-    knowledge::create(&conn, "v", &NewRecord::approved_fact("corpus test fact alpha")).unwrap();
-    knowledge::create(&conn, "v", &NewRecord::approved_fact("corpus test fact beta")).unwrap();
+    knowledge::create(
+        &conn,
+        "v",
+        &NewRecord::approved_fact("corpus test fact alpha"),
+    )
+    .unwrap();
+    knowledge::create(
+        &conn,
+        "v",
+        &NewRecord::approved_fact("corpus test fact beta"),
+    )
+    .unwrap();
 
     // Export
     let pkg = sammy_lib::corpus::export_full(&conn, "v", "Test").unwrap();
@@ -191,7 +261,9 @@ fn workflow_corpus_package() {
     assert_eq!(o2.imported, 0, "reimport must not create duplicates");
     // Verify final state
     let count: i64 = dest
-        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| r.get(0))
+        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(count, 2);
 }
@@ -206,7 +278,17 @@ fn workflow_memory() {
 
     // Create and reject
     let c1 = sammy_lib::memory::propose(
-        &conn, "rejected memory about dragons", "fact", None, None, "", 0.5, "normal", "", "mock", false,
+        &conn,
+        "rejected memory about dragons",
+        "fact",
+        None,
+        None,
+        "",
+        0.5,
+        "normal",
+        "",
+        "mock",
+        false,
     )
     .unwrap();
     sammy_lib::memory::reject(&conn, c1).unwrap();
@@ -215,12 +297,25 @@ fn workflow_memory() {
 
     // Create and approve
     let c2 = sammy_lib::memory::propose(
-        &conn, "the owner prefers morning meetings", "preference", None, None, "", 0.8, "normal", "", "mock", false,
+        &conn,
+        "the owner prefers morning meetings",
+        "preference",
+        None,
+        None,
+        "",
+        0.8,
+        "normal",
+        "",
+        "mock",
+        false,
     )
     .unwrap();
     let kid = sammy_lib::memory::approve(&conn, "v", c2, None).unwrap();
     let hits2 = knowledge::search_current(&conn, "meetings", 10).unwrap();
-    assert!(hits2.contains(&kid), "approved memory should be in retrieval");
+    assert!(
+        hits2.contains(&kid),
+        "approved memory should be in retrieval"
+    );
 }
 
 // §36: Provider privacy
@@ -244,7 +339,10 @@ fn workflow_provider_privacy() {
 
     // Routing: local_only with local available uses local (no consent needed)
     let d = providers::resolve_routing(RoutingMode::LocalOnly, 1, 1, &[true], &[true]);
-    assert!(matches!(d, providers::RoutingDecision::Use { provider_index: 0 }));
+    assert!(matches!(
+        d,
+        providers::RoutingDecision::Use { provider_index: 0 }
+    ));
 }
 
 // §36: Permissions
@@ -255,7 +353,11 @@ fn workflow_permissions() {
     sammy_lib::permissions::ensure_schema(&conn).unwrap();
 
     // No grant → not permitted
-    assert!(sammy_lib::permissions::check_permission(&conn, "source_search").unwrap().is_none());
+    assert!(
+        sammy_lib::permissions::check_permission(&conn, "source_search")
+            .unwrap()
+            .is_none()
+    );
 
     // Grant
     let _gid = sammy_lib::permissions::grant(
@@ -268,11 +370,19 @@ fn workflow_permissions() {
     .unwrap();
 
     // Now permitted
-    assert!(sammy_lib::permissions::check_permission(&conn, "source_search").unwrap().is_some());
+    assert!(
+        sammy_lib::permissions::check_permission(&conn, "source_search")
+            .unwrap()
+            .is_some()
+    );
 
     // Revoke → not permitted again
     sammy_lib::permissions::revoke(&conn, "source_search").unwrap();
-    assert!(sammy_lib::permissions::check_permission(&conn, "source_search").unwrap().is_none());
+    assert!(
+        sammy_lib::permissions::check_permission(&conn, "source_search")
+            .unwrap()
+            .is_none()
+    );
 }
 
 fn setup_knowledge_schema(conn: &rusqlite::Connection) {

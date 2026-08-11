@@ -1004,7 +1004,10 @@ pub struct AuditEventView {
 
 /// List recent audit events (most-recent-first).
 #[tauri::command]
-pub fn audit_list(state: tauri::State<AppState>, limit: Option<i64>) -> AppResult<Vec<AuditEventView>> {
+pub fn audit_list(
+    state: tauri::State<AppState>,
+    limit: Option<i64>,
+) -> AppResult<Vec<AuditEventView>> {
     state.with_active(|v| {
         let conn = v.lock_conn();
         let events = crate::audit::list(&conn, limit.unwrap_or(100))?;
