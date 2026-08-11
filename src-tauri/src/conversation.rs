@@ -73,6 +73,29 @@ pub struct MessageMeta {
     pub crossed_to_cloud: bool,
 }
 
+/// Ensure the conversations + messages tables exist (idempotent). The v3
+/// migration creates these in a real vault; this helper exists for tests and
+/// for modules that create in-memory connections.
+pub fn ensure_schema(conn: &Connection) -> AppResult<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS conversations (
+            conversation_id TEXT PRIMARY KEY,
+            title           TEXT,
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS messages (
+            message_id      TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL REFERENCES conversations(conversation_id),
+            role            TEXT NOT NULL,
+            content         TEXT NOT NULL,
+            created_at      TEXT NOT NULL,
+            seq             INTEGER NOT NULL
+        );",
+    )?;
+    Ok(())
+}
+
 /// Create a new conversation. Returns its id.
 pub fn create(conn: &Connection, title: Option<&str>) -> AppResult<ConversationId> {
     let id = ConversationId::new();
