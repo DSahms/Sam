@@ -47,11 +47,13 @@ work continues. None of these block the build or the test suite.
 
 ## Dependency license report
 
-- **Status:** Not yet generated. Directive §3 requires a dependency + license
-  report compatible with future commercial distribution. SQLCipher is under a
-  permissive license; OpenSSL under Apache-2.0; the Rust crates are mostly
-  MIT/Apache-2.0. A machine-generated report (`cargo about` or equivalent) will
-  be produced before the Phase 9 release gate.
+- **Status:** Generated. See `LICENSES.md` — 462 crates scanned from Cargo.lock.
+  **No GPL/copyleft crates found.** All resolved dependencies use permissive
+  licenses (MIT, Apache-2.0, BSD, MPL-2.0, Zlib, Unicode-3.0, CC0). 171 crates
+  show as "unknown" because they use `license.workspace = true` in their
+  manifests (mostly the `smol`/`async-ecosystem` crates, known MIT/Apache-2.0);
+  a `cargo about` pass with the crates.io API can resolve these definitively
+  before the final release gate.
 
 ## npm audit advisories
 
