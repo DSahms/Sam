@@ -3,81 +3,108 @@
 This file describes **only what currently works**, with evidence. It is updated
 every checkpoint. If something is not here, it does not work yet.
 
-Last updated: 2026-08-05 (Phase 1 in progress — vault spine + UI functional)
+Last updated: 2026-08-09 (Phases 0–8 implemented; checkpoint da9db4f)
 
 ## Works now
 
-### Foundation (Phase 0 — complete and verified)
-- **Workspace builds.** `cargo build --workspace` succeeds on Windows 11 x64
-  (MSVC toolchain). SQLCipher + OpenSSL bundled via
-  `rusqlite`'s `bundled-sqlcipher-vendored-openssl`.
-- **Frontend builds.** `npx vite build` produces a production bundle (~154 KB JS
-  / ~4 KB CSS).
-- **Quality gate green end-to-end.** `cargo fmt --check`,
-  `cargo clippy -D warnings`, `eslint --max-warnings=0`, `prettier --check`,
-  `tsc --noEmit`, `cargo test`, `vitest` all pass.
-- **App runs.** Tauri binary registers all commands; React shell renders the
-  sidebar + 8 views; the Vaults view is fully functional.
-- **CLI binary.** `sammy-cli --version` / `--help` work.
+### Phase 0 — Foundation (verified)
+- Tauri 2 + Rust + React + TS + Vite. `cargo build --workspace` and `vite build`
+  succeed. SQLCipher + OpenSSL bundled. All §7 module boundaries as Rust modules.
+- Quality gate: `cargo fmt`, `cargo clippy -D warnings`, eslint, prettier, tsc strict.
+- `sammy-cli` binary with `corpus validate` subcommand.
 
-### Cryptographic vault spine (Phase 1 — core complete)
-- **`crypto` module.** `SecretKey` (zeroizing, constant-time eq), CSPRNG,
-  Argon2id KEK derivation, AES-256-GCM, key wrap/unwrap, `VaultKeyMaterial`
-  (versioned, passphrase + recovery unwrap), high-entropy recovery codes
-  (160-bit, base32+checksum). Verified: no plaintext DEK in material.
-- **`vault` module.** Per-vault directory (`vault.json` + `vault.db`); create /
-  unlock (passphrase or recovery) / lock / list / delete; multi-vault isolation;
-  SQLCipher encrypted-at-rest (tested); manifest free of plaintext secrets.
-- **`db` module.** Versioned, forward-only migrations with transactional
-  rollback protection (directive §37). v2–v4 define knowledge_records,
-  conversations/messages, sources tables. Applied automatically on unlock.
-- **`audit` module.** Append-only `audit_events` API: record / list /
-  count_by_category. No delete/update path. 9 categories.
-- **`lock` module.** `LockPolicy` (5/15/30/60 min, manual-only; default 15),
-  `InactivityWatchdog` (touch / should_lock), `SystemClock`. Integrated into
-  `AppState`; a native background thread checks every 30s and locks on
-  inactivity.
-- **Tauri commands.** `vault_create/list/unlock/unlock_unlock_recovery/lock/
-  status`, `touch_activity`, `lock_policy_get/set`. `AppError` serializes to a
-  sanitized `{kind, message}`.
-- **Frontend Vaults view (functional).** The owner can create a vault (with a
-  one-time recovery-code display), unlock by passphrase or recovery code, lock,
-  enumerate vaults, and pick the inactivity policy — all against real
-  SQLCipher-backed storage.
+### Phase 1 — Cryptographic vault spine (verified)
+- `crypto`: SecretKey (zeroizing, constant-time eq), CSPRNG, Argon2id, AES-256-GCM,
+  key wrap/unwrap, VaultKeyMaterial (passphrase + recovery unwrap), recovery codes.
+- `vault`: per-vault dir (vault.json + vault.db); create/unlock/lock/list/delete;
+  multi-vault isolation; SQLCipher encrypted-at-rest (tested); atomic writes.
+- `db`: versioned, forward-only migrations with transactional rollback (v1–v5).
+- `audit`: append-only audit_events API (record/list/count_by_category).
+- `lock`: inactivity watchdog (5/15/30/60 min, manual); Windows session-lock
+  detection (desktop-name polling via GetUserObjectInformationW); background thread.
+- `backup`: SAMMYBK1 encrypted package format; create/restore (passphrase or
+  recovery); integrity verification; path-traversal protection; staging + atomic
+  rename.
+- Tauri commands wired; functional Vaults UI (create/unlock/lock, recovery-code
+  display, inactivity-policy picker).
 
-## Verified Phase 1 exit criteria
-- ✅ Private access impossible before unlock (commands check `AppState`).
-- ✅ Wrong passwords fail safely (opaque `AppError::Crypto`).
-- ✅ Recovery-key restore works (passphrase OR recovery both unwrap the DEK).
-- ✅ Database content not readable as plaintext (SQLCipher; integration-tested).
-- ✅ Vaults cannot access one another (separate DEKs/DBs; integration-tested).
-- ✅ Locking clears active sensitive state (the `Vault` session is dropped).
-- ✅ DB migration has rollback protection (broken-migration rollback test).
+### Phase 2 — Identity, chat, providers (verified)
+- `identity`: structured CompanionIdentity (§12); PromptAssembly (8 sanitized
+  sections); inspection_view (lengths only); per-vault store.
+- `conversation`: conversations + messages model; create/append/list/messages.
+- `providers`: Provider trait; MockProvider (deterministic), KoboldCppProvider
+  (local, transport-abstracted), VeniceProvider (cloud, key-gated);
+  resolve_routing (5 modes, default ask_before_crossing).
+- `chat` runtime: orchestrates identity → prompt → routing → consent → provider →
+  audit; cloud-crossing consent flow; denial → no transmission (audited).
+- Tauri commands wired; functional Chat UI (conversations, send, routing picker,
+  cloud-crossing consent banner with Approve/Deny).
 
-## Not yet done in Phase 1
-- Inactivity lock works, but Windows **session-lock** signal is not yet hooked
-  (the periodic inactivity checker covers the common case; OS session-lock
-  detection is the next hardening step).
-- Initial full encrypted backup / restore (§30/§31) not yet implemented — this
-  is the next major slice.
-- App-exit auto-lock relies on process termination dropping the session; an
-  explicit lock-on-exit hook is not yet wired.
-- Audit events are recordable but no command currently records them (the API is
-  ready; callers in Phase 2+ will use it).
+### Phase 3 — Structured knowledge (verified)
+- `knowledge`: 18 record types, 7 states, sensitivity, provenance, contradictions,
+  corrections (supersession), tombstones; FTS5 search over current records only.
+- Tauri commands wired; What I Know UI (add fact, search, status filters,
+  approve/reject/correct/tombstone, contradiction/supersession badges).
 
-## Known limitations / mocks in use
-- Phase 2+ subsystems (identity, conversation, providers, knowledge, corpus,
-  sources, retrieval, citations, memory, permissions, tools, backup) are stubs.
-- Chat / What I Know / Sources / Memory / Privacy / Backup / Settings views are
-  placeholders.
-- No code-signing; builds are unsigned dev packages.
+### Phase 4 — Secure source ingestion (verified)
+- `sources`: SourceKind classification; Extractor trait + Text/Markdown/JSON/CSV
+  extractors; AES-256-GCM encrypted storage; import/list/extracted/delete/search.
+- FTS5 query sanitization (phrase-quoting) in both sources and knowledge search.
+- Tauri commands wired; Sources UI (file-picker import, search, preview, delete).
+
+### Phase 5 — Retrieval and citations (verified)
+- `citations`: CitationLocation, TrustClassification, ClaimLabel, ClaimBlock,
+  AnnotatedAnswer with consistency check (no fabricated citation ids).
+- `retrieval`: EmbeddingProvider + StubEmbeddingProvider; VectorIndex +
+  InMemoryVectorIndex (cosine); retrieve() 11-step pipeline; assemble_answer().
+- The vector index is rebuildable and is NOT the canonical corpus.
+
+### Phase 6 — Corpus import/export (verified)
+- `corpus`: CorpusManifest + CorpusRecord + CorpusPackage; export_full (read-only);
+  validate_package (version, checksum, unique ids); import (idempotent upsert,
+  tombstones); JSON round-trip. JSON schemas in schemas/.
+- CLI: `sammy-cli corpus validate <package.json>`. Tauri commands wired.
+
+### Phase 7 — Auditable memory (verified)
+- `memory`: MemoryCandidate with full provenance; CandidateState
+  (pending/approved/rejected/deferred/temporary); propose/approve (promotes to
+  knowledge record)/reject/defer/mark_temporary/delete/list.
+- Conversation content never becomes durable memory without review (§26).
+- Tauri commands wired.
+
+### Phase 8 — Permission architecture (verified)
+- `permissions`: RiskLevel, Reversibility, ToolDeclaration, ToolRequest,
+  PermissionMode; grant/check/revoke/list_active; revocation immediate.
+- `tools`: registry of 5 tools (source_search, corpus_lookup, draft_generation,
+  planning, mock_external); NO external actions execute.
+- Tauri commands wired.
+
+## Verified Phase exit criteria
+- ✅ Private/chat/source access impossible before unlock.
+- ✅ Wrong passwords fail safely; recovery-key restore works.
+- ✅ Database content not plaintext-readable; vaults isolated.
+- ✅ DB migration has rollback protection.
+- ✅ Locking clears sensitive state; inactivity + session lock.
+- ✅ Backup restores via passphrase or recovery; integrity verified.
+- ✅ No silent cloud crossing; denial audited; no transmission.
+- ✅ Provider change never erases identity/conversations.
+- ✅ Facts/inference distinguishable; contradictions coexist; corrections preserve history.
+- ✅ Tombstoned/deleted records excluded from retrieval.
+- ✅ Corpus re-import creates no duplicates; tombstones remove availability.
+- ✅ Memory requires review; rejected never in retrieval.
+- ✅ No tool executes without permission; revocation immediate.
+- ✅ FTS5 queries sanitized (no operator injection).
+
+## Not yet done
+- Phase 9 (product validation): Windows packaging/clean-machine install;
+  performance tests at scale; dependency license report; user documentation.
+- PDF/DOCX/image extractors + OCR adapter (interface ready; binding unchosen).
+- Real KoboldCpp/Venice HTTP transports (interface ready; mock transports tested).
+- Embedding/vector engine persistence (in-memory stub tested).
 
 ## External blockers
-See `EXTERNAL_BLOCKERS.md`: build PATH must include Strawberry Perl (present);
-no code-signing cert; no Venice API key; no KoboldCpp endpoint; OCR binding not
-finalized; license report not yet generated. None block the build or tests.
+See `EXTERNAL_BLOCKERS.md`. None block the build or tests.
 
 ## Next work
-1. Initial full encrypted backup + restore (Phase 1's last major slice).
-2. Hook the Windows session-lock signal to lock the vault.
-3. Begin Phase 2 (identity, conversation, mock/KoboldCpp/Venice providers).
+Phase 9 product validation, or hardening the remaining adapters (PDF/DOCX/OCR,
+real HTTP transports, persistent vector index).

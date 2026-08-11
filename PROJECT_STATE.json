@@ -1,7 +1,7 @@
 {
   "project": "Sammy",
-  "current_phase": "Phase 1 in progress (vault spine + functional UI + backup)",
-  "status": "phase_1_backup_verified",
+  "current_phase": "Phases 0-8 implemented; Phase 9 (validation) pending",
+  "status": "phases_0_through_8_verified",
   "completed_capabilities": [
     "workspace_cargo_build",
     "frontend_vite_build",
@@ -27,35 +27,59 @@
     "db_versioned_migrations_with_rollback",
     "audit_append_only_api",
     "lock_inactivity_watchdog",
+    "lock_windows_session_lock_detection",
     "lock_policy_commands",
     "frontend_vaults_view_functional",
     "backup_create_encrypted_package",
     "backup_restore_with_passphrase",
     "backup_restore_with_recovery",
     "backup_integrity_verification",
-    "backup_tauri_commands_wired"
+    "backup_tauri_commands_wired",
+    "identity_structured_provider_independent",
+    "identity_prompt_assembly",
+    "identity_store",
+    "conversation_model_and_storage",
+    "providers_trait_mock_koboldcpp_venice",
+    "providers_routing_modes",
+    "chat_runtime_with_consent_and_audit",
+    "frontend_chat_view_functional",
+    "knowledge_full_schema_18_types_7_states",
+    "knowledge_fts5_search",
+    "knowledge_contradictions_corrections_supersession_tombstones",
+    "frontend_what_i_know_view_functional",
+    "sources_encrypted_storage_aes256gcm",
+    "sources_text_markdown_json_csv_extractors",
+    "sources_fts5_search_sanitized",
+    "frontend_sources_view_functional",
+    "citations_trust_classification_claim_labels",
+    "retrieval_11_step_pipeline",
+    "retrieval_embedding_vector_interfaces",
+    "corpus_export_import_idempotent",
+    "corpus_cli_validator",
+    "memory_candidate_workflow",
+    "memory_approve_promotes_to_knowledge",
+    "permissions_grant_revoke_immediate",
+    "tools_registry_read_only_and_mock_only"
   ],
   "active_work": [
-    "phase_1_windows_session_lock_hook",
-    "phase_2_identity_and_providers"
+    "phase_9_product_validation"
   ],
   "known_failures": [],
   "external_blockers": [
     "no_code_signing_certificate",
     "no_venice_api_key",
     "no_koboldcpp_endpoint",
-    "ocr_binding_not_finalized",
+    "pdf_docx_ocr_bindings_not_wired_interfaces_ready",
     "license_report_not_generated",
     "build_requires_strawberry_perl_on_path"
   ],
   "security_debt": [
-    "windows_session_lock_not_hooked_only_inactivity_check",
-    "audit_events_not_recorded_by_any_command_yet",
-    "phase_2_through_8_subsystems_are_stubs"
+    "real_koboldcpp_venice_http_transports_use_mock_in_tests",
+    "embedding_vector_engine_is_in_memory_stub",
+    "phase_9_validation_not_run"
   ],
   "test_summary": {
-    "rust_unit": { "passed": 64, "failed": 0, "ignored": 0 },
-    "rust_integration": { "passed": 4, "failed": 0, "ignored": 0 },
+    "rust_unit": { "passed": 159, "failed": 0, "ignored": 0 },
     "frontend": { "passed": 6, "failed": 0, "ignored": 0 },
     "fmt_check": "pass",
     "clippy": "clean (-D warnings)",
@@ -63,11 +87,14 @@
     "prettier": "pass",
     "tsc_strict": "pass"
   },
-  "last_verified_commit": "pending_backup_commit",
+  "last_verified_commit": "da9db4f",
   "next_actions": [
-    "hook Windows session-lock signal to lock vault",
-    "begin Phase 2: identity, conversation model, mock/KoboldCpp/Venice providers",
-    "wire backup UI into BackupRecoveryView"
+    "Phase 9: Windows packaging, clean-machine install test",
+    "Phase 9: dependency license report",
+    "Phase 9: performance tests at representative scale",
+    "Wire real PDF/DOCX/image extractors + OCR adapter",
+    "Wire real KoboldCpp/Venice HTTP transports",
+    "Persistent vector index"
   ],
-  "updated_at": "2026-08-05T11:45:00Z"
+  "updated_at": "2026-08-09T00:00:00Z"
 }
