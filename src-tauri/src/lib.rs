@@ -122,6 +122,8 @@ pub fn run() {
             app::permission_list_active,
             app::permission_grant,
             app::permission_revoke,
+            app::audit_list,
+            app::audit_counts,
         ])
         .setup(|app| {
             // Periodic lock checker: a native thread ticks every 15 seconds and

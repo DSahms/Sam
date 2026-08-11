@@ -987,9 +987,50 @@ pub fn permission_revoke(
     })?
 }
 
-// Suppress unused import warning when RecoveryCode import is only used in type.
-#[allow(unused_imports)]
-use RecoveryCode as _RecoveryCode;
+// -----------------------------------------------------------------------------
+// Audit commands (Phase 9: Privacy & Audit UI)
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct AuditEventView {
+    pub seq: i64,
+    pub event_id: String,
+    pub occurred_at: String,
+    pub actor: Option<String>,
+    pub category: String,
+    pub action: String,
+    pub detail_json: serde_json::Value,
+}
+
+/// List recent audit events (most-recent-first).
+#[tauri::command]
+pub fn audit_list(state: tauri::State<AppState>, limit: Option<i64>) -> AppResult<Vec<AuditEventView>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        let events = crate::audit::list(&conn, limit.unwrap_or(100))?;
+        Ok(events
+            .iter()
+            .map(|e| AuditEventView {
+                seq: e.seq,
+                event_id: e.event_id.clone(),
+                occurred_at: e.occurred_at.clone(),
+                actor: e.actor.clone(),
+                category: e.category.clone(),
+                action: e.action.clone(),
+                detail_json: e.detail_json.clone(),
+            })
+            .collect())
+    })?
+}
+
+/// Count audit events by category.
+#[tauri::command]
+pub fn audit_counts(state: tauri::State<AppState>) -> AppResult<Vec<(String, i64)>> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::audit::count_by_category(&conn)
+    })?
+}
 
 // -----------------------------------------------------------------------------
 // App data dir

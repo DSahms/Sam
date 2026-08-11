@@ -128,6 +128,34 @@ export const api = {
   sourceDelete: (sourceId: string) => invoke<void>("source_delete", { sourceId }),
   sourceSearch: (query: string, limit?: number) =>
     invoke<string[]>("source_search", { query, limit: limit ?? 20 }),
+
+  // Audit
+  auditList: (limit?: number) =>
+    invoke<AuditEventView[]>("audit_list", { limit: limit ?? 100 }),
+  auditCounts: () => invoke<[string, number][]>("audit_counts"),
+
+  // Memory
+  memoryList: (stateFilter?: string) =>
+    invoke<MemoryCandidateView[]>("memory_list", { stateFilter: stateFilter ?? null }),
+  memoryApprove: (candidateId: string, editedText?: string) =>
+    invoke<string>("memory_approve", { candidateId, editedText: editedText ?? null }),
+  memoryReject: (candidateId: string) => invoke<void>("memory_reject", { candidateId }),
+  memoryDefer: (candidateId: string) => invoke<void>("memory_defer", { candidateId }),
+  memoryMarkTemporary: (candidateId: string) =>
+    invoke<void>("memory_mark_temporary", { candidateId }),
+  memoryDelete: (candidateId: string) => invoke<void>("memory_delete", { candidateId }),
+
+  // Permissions
+  toolRegistry: () => invoke<ToolDeclarationView[]>("tool_registry"),
+  permissionListActive: () => invoke<PermissionGrantView[]>("permission_list_active"),
+  permissionGrant: (toolId: string, mode: string, scope: string, expiresAt?: string) =>
+    invoke<string>("permission_grant", {
+      toolId,
+      mode,
+      scope,
+      expiresAt: expiresAt ?? null,
+    }),
+  permissionRevoke: (toolId: string) => invoke<void>("permission_revoke", { toolId }),
 };
 
 export type LockPolicy =
@@ -244,4 +272,49 @@ export interface SourceView {
   imported_at: string;
   status: string;
   bytes_len: number;
+}
+
+export interface AuditEventView {
+  seq: number;
+  event_id: string;
+  occurred_at: string;
+  actor: string | null;
+  category: string;
+  action: string;
+  detail_json: unknown;
+}
+
+export interface MemoryCandidateView {
+  candidate_id: string;
+  proposed_text: string;
+  record_type: string;
+  source_conversation_id: string | null;
+  source_message_id: string | null;
+  reason: string;
+  confidence: number;
+  sensitivity: string;
+  suggested_domain: string;
+  provider_used: string;
+  crossed_to_cloud: boolean;
+  created_at: string;
+  state: string;
+}
+
+export interface ToolDeclarationView {
+  tool_id: string;
+  operation: string;
+  data_accessed: string;
+  data_leaving_device: string;
+  destination: string;
+  risk: string;
+  reversibility: string;
+}
+
+export interface PermissionGrantView {
+  grant_id: string;
+  tool_id: string;
+  mode: string;
+  scope: string;
+  granted_at: string;
+  expires_at: string | null;
 }
