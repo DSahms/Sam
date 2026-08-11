@@ -124,6 +124,10 @@ pub fn run() {
             app::permission_revoke,
             app::audit_list,
             app::audit_counts,
+            app::provider_config_get,
+            app::provider_config_save,
+            app::koboldcpp_test_connection,
+            app::koboldcpp_chat,
         ])
         .setup(|app| {
             // Periodic lock checker: a native thread ticks every 15 seconds and

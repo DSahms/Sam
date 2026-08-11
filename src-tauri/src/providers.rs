@@ -309,6 +309,105 @@ pub trait KoboldTransport: Send + Sync {
     fn list_models(&self, endpoint: &str) -> AppResult<String>;
 }
 
+/// Real HTTP transport for KoboldCpp using `reqwest::blocking`. KoboldCpp exposes
+/// an OpenAI-compatible API at `<base>/v1`. We POST to `<base>/v1/chat/completions`
+/// and GET `<base>/v1/models`.
+///
+/// On error, only a sanitized category string is returned — never the request
+/// body (which contains private prompt text) and never HTTP response detail
+/// beyond a status code summary. This preserves directive §13's rule that
+/// "provider errors must not expose the full private prompt in logs."
+pub struct HttpKoboldTransport {
+    client: reqwest::blocking::Client,
+}
+
+impl HttpKoboldTransport {
+    pub fn new() -> Self {
+        Self::with_timeout(std::time::Duration::from_secs(120))
+    }
+
+    pub fn with_timeout(timeout: std::time::Duration) -> Self {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("reqwest blocking client");
+        Self { client }
+    }
+
+    /// Normalize the endpoint to end without a trailing slash, so we can safely
+    /// append `/v1/...`.
+    fn v1_url(endpoint: &str, path: &str) -> String {
+        let base = endpoint.trim_end_matches('/');
+        format!("{base}/v1{path}")
+    }
+}
+
+impl Default for HttpKoboldTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KoboldTransport for HttpKoboldTransport {
+    fn chat(&self, endpoint: &str, req_json: &str) -> AppResult<String> {
+        let url = Self::v1_url(endpoint, "/chat/completions");
+        let resp = self
+            .client
+            .post(&url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(req_json.to_string())
+            .send()
+            .map_err(|e| {
+                log::error!("koboldcpp chat request failed (url redacted)");
+                AppError::Config(format!("koboldcpp unreachable: {}", sanitize_err(&e)))
+            })?;
+        let status = resp.status();
+        if !status.is_success() {
+            let code = status.as_u16();
+            // Do NOT log the body — it may contain private content reflected
+            // by the model. Only log the status code.
+            log::warn!("koboldcpp chat returned HTTP {code}");
+            return Err(AppError::Config(format!("koboldcpp returned HTTP {code}")));
+        }
+        resp.text().map_err(|e| {
+            log::warn!("koboldcpp response read failed");
+            AppError::Config(format!("koboldcpp response error: {}", sanitize_err(&e)))
+        })
+    }
+
+    fn list_models(&self, endpoint: &str) -> AppResult<String> {
+        let url = Self::v1_url(endpoint, "/models");
+        let resp = self.client.get(&url).send().map_err(|e| {
+            log::error!("koboldcpp models request failed");
+            AppError::Config(format!("koboldcpp unreachable: {}", sanitize_err(&e)))
+        })?;
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(AppError::Config(format!(
+                "koboldcpp /models returned HTTP {}",
+                status.as_u16()
+            )));
+        }
+        resp.text().map_err(|e| {
+            AppError::Config(format!("koboldcpp models read error: {}", sanitize_err(&e)))
+        })
+    }
+}
+
+/// Sanitize a reqwest error: return a short category without the full URL or
+/// request body. We only surface whether it's a connect/timeout/decode error.
+fn sanitize_err(e: &reqwest::Error) -> String {
+    if e.is_connect() {
+        "connection refused".into()
+    } else if e.is_timeout() {
+        "timed out".into()
+    } else if e.is_decode() {
+        "bad response format".into()
+    } else {
+        "network error".into()
+    }
+}
+
 impl KoboldCppProvider {
     pub fn new(
         endpoint: impl Into<String>,
@@ -619,5 +718,128 @@ mod tests {
             let back: RoutingMode = serde_json::from_str(&s).unwrap();
             assert_eq!(m, back);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // HttpKoboldTransport tests with a tiny mock HTTP server.
+    // -------------------------------------------------------------------------
+
+    /// Start a mock HTTP server on a random localhost port. Returns the base
+    /// URL and a handle to the server thread. The server responds to one
+    /// request then returns its canned response.
+    fn mock_server(response_body: String, expected_path_contains: &str) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let path_check = expected_path_contains.to_string();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                use std::io::{Read, Write};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).unwrap();
+                let req_str = String::from_utf8_lossy(&buf);
+                let body = if req_str.contains(&path_check) {
+                    response_body.clone()
+                } else {
+                    r#"{"error":"unexpected path"}"#.into()
+                };
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        format!("http://{}", addr)
+    }
+
+    #[test]
+    fn http_transport_list_models_works() {
+        let url = mock_server(
+            r#"{"data":[{"id":"test-gguf-model"},{"id":"backup-model"}]}"#.into(),
+            "/v1/models",
+        );
+        let transport =
+            HttpKoboldTransport::with_timeout(std::time::Duration::from_secs(5));
+        let raw = KoboldTransport::list_models(&transport, &url).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let ids: Vec<&str> = v["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["id"].as_str().unwrap())
+            .collect();
+        assert!(ids.contains(&"test-gguf-model"));
+    }
+
+    #[test]
+    fn http_transport_chat_works() {
+        let url = mock_server(
+            r#"{"choices":[{"message":{"content":"Hello from the model!"}}]}"#.into(),
+            "/v1/chat/completions",
+        );
+        let transport =
+            HttpKoboldTransport::with_timeout(std::time::Duration::from_secs(5));
+        let req_json = r#"{"model":"test","messages":[{"role":"user","content":"hi"}]}"#;
+        let raw = KoboldTransport::chat(&transport, &url, req_json).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(
+            v["choices"][0]["message"]["content"].as_str().unwrap(),
+            "Hello from the model!"
+        );
+    }
+
+    #[test]
+    fn http_transport_unreachable_endpoint_fails_gracefully() {
+        // Port 1 is reserved/unlikely to have anything listening.
+        let transport =
+            HttpKoboldTransport::with_timeout(std::time::Duration::from_secs(2));
+        let err =
+            KoboldTransport::list_models(&transport, "http://127.0.0.1:1").unwrap_err();
+        // Error must be opaque (no request body, no URL detail).
+        let msg = format!("{err}");
+        assert!(
+            !msg.contains("/v1/models"),
+            "error must not leak the URL path"
+        );
+    }
+
+    #[test]
+    fn http_transport_error_does_not_leak_request_body() {
+        // Start a server that returns 500; the error must not contain the
+        // request body (which has private prompt text).
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                use std::io::{Read, Write};
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let resp =
+                    "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        let url = format!("http://{}", addr);
+        let transport =
+            HttpKoboldTransport::with_timeout(std::time::Duration::from_secs(5));
+        let private_prompt = "this-is-a-secret-prompt-content";
+        let req_json = format!(r#"{{"messages":[{{"content":"{private_prompt}"}}]}}"#);
+        let err = KoboldTransport::chat(&transport, &url, &req_json).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            !msg.contains(private_prompt),
+            "error must not contain the private prompt text"
+        );
+        assert!(msg.contains("500"), "error should mention the HTTP status");
+    }
+
+    #[test]
+    fn http_transport_normalizes_trailing_slash() {
+        // The URL builder should handle trailing slashes gracefully.
+        let url1 = HttpKoboldTransport::v1_url("http://localhost:5001", "/models");
+        let url2 = HttpKoboldTransport::v1_url("http://localhost:5001/", "/models");
+        assert_eq!(url1, "http://localhost:5001/v1/models");
+        assert_eq!(url1, url2);
     }
 }

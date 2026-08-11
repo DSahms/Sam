@@ -55,6 +55,11 @@ hex = "0.4"
 thiserror = "2"
 anyhow = "1"
 
+# --- HTTP client (KoboldCpp/Venice provider transports) ---
+# blocking feature for synchronous provider calls; rustls-tls for future
+# cloud (Venice) HTTPS support. KoboldCpp on localhost uses plain HTTP.
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"], default-features = false }
+
 # --- Logging (sanitized; secrets never logged) ---
 log = "0.4"
 

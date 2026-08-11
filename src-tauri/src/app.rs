@@ -1036,6 +1036,123 @@ pub fn audit_counts(state: tauri::State<AppState>) -> AppResult<Vec<(String, i64
 }
 
 // -----------------------------------------------------------------------------
+// Provider configuration commands (KoboldCpp connectivity)
+// -----------------------------------------------------------------------------
+
+/// Get the provider configuration for the active vault.
+#[tauri::command]
+pub fn provider_config_get(
+    state: tauri::State<AppState>,
+) -> AppResult<crate::settings::ProviderConfig> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::settings::load(&conn)
+    })?
+}
+
+/// Save the provider configuration for the active vault.
+#[tauri::command]
+pub fn provider_config_save(
+    state: tauri::State<AppState>,
+    config: crate::settings::ProviderConfig,
+) -> AppResult<()> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::settings::save(&conn, &config)
+    })?
+}
+
+/// Test connectivity to a KoboldCpp endpoint. Returns the list of available
+/// models. This makes a real HTTP GET to `<endpoint>/v1/models`. No vault
+/// unlock is strictly required (the endpoint is non-secret), but we run it
+/// through the active state for auditability.
+#[tauri::command]
+pub fn koboldcpp_test_connection(
+    state: tauri::State<AppState>,
+    endpoint: String,
+) -> AppResult<Vec<String>> {
+    // Record an audit event for the connection test.
+    let _ = state.with_active(|v| {
+        let conn = v.lock_conn();
+        let _ = crate::audit::record(
+            &conn,
+            crate::audit::AuditCategory::Provider,
+            "koboldcpp_connection_test",
+            None,
+            &serde_json::json!({"endpoint": endpoint}),
+        );
+        Ok::<(), AppError>(())
+    });
+    // Make the real HTTP call outside the vault lock (don't hold the DB
+    // mutex during network I/O).
+    let transport = crate::providers::HttpKoboldTransport::new();
+    let raw = crate::providers::KoboldTransport::list_models(&transport, &endpoint)?;
+    let v: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| AppError::Config(format!("koboldcpp bad model list: {e}")))?;
+    let mut out = Vec::new();
+    if let Some(arr) = v["data"].as_array() {
+        for m in arr {
+            if let Some(id) = m["id"].as_str() {
+                out.push(id.to_string());
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Send a chat request directly to a configured KoboldCpp endpoint (bypassing
+/// the routing/consent layer for a direct manual test). This is local-only and
+/// does not cross any privacy boundary.
+#[tauri::command]
+pub fn koboldcpp_chat(
+    state: tauri::State<AppState>,
+    endpoint: String,
+    model: String,
+    system_prompt: String,
+    user_message: String,
+    max_tokens: Option<u32>,
+) -> AppResult<serde_json::Value> {
+    let provider = crate::providers::KoboldCppProvider::new(
+        endpoint.clone(),
+        model.clone(),
+        Box::new(crate::providers::HttpKoboldTransport::new()),
+    );
+    let req = crate::providers::ChatRequest {
+        system: system_prompt,
+        messages: vec![crate::providers::ProviderMessage {
+            role: crate::conversation::Role::User,
+            content: user_message,
+        }],
+        model,
+        max_tokens: max_tokens.unwrap_or(256),
+        routing: crate::providers::RoutingMode::LocalOnly,
+    };
+    let resp = crate::providers::Provider::chat(&provider, &req)?;
+    // Audit the call.
+    let _ = state.with_active(|v| {
+        let conn = v.lock_conn();
+        let _ = crate::audit::record(
+            &conn,
+            crate::audit::AuditCategory::Provider,
+            "provider_local_call",
+            None,
+            &serde_json::json!({
+                "provider": "koboldcpp",
+                "model": resp.model,
+                "direct_test": true,
+            }),
+        );
+        Ok::<(), AppError>(())
+    });
+    Ok(serde_json::json!({
+        "content": resp.content,
+        "provider": resp.provider,
+        "model": resp.model,
+        "crossed_to_cloud": resp.crossed_to_cloud,
+    }))
+}
+
+// -----------------------------------------------------------------------------
 // App data dir
 // -----------------------------------------------------------------------------
 

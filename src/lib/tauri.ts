@@ -156,6 +156,32 @@ export const api = {
       expiresAt: expiresAt ?? null,
     }),
   permissionRevoke: (toolId: string) => invoke<void>("permission_revoke", { toolId }),
+
+  // Provider config (KoboldCpp connectivity)
+  providerConfigGet: () => invoke<ProviderConfig>("provider_config_get"),
+  providerConfigSave: (config: ProviderConfig) =>
+    invoke<void>("provider_config_save", { config }),
+  koboldcppTestConnection: (endpoint: string) =>
+    invoke<string[]>("koboldcpp_test_connection", { endpoint }),
+  koboldcppChat: (
+    endpoint: string,
+    model: string,
+    systemPrompt: string,
+    userMessage: string,
+    maxTokens?: number,
+  ) =>
+    invoke<{
+      content: string;
+      provider: string;
+      model: string;
+      crossed_to_cloud: boolean;
+    }>("koboldcpp_chat", {
+      endpoint,
+      model,
+      systemPrompt,
+      userMessage,
+      maxTokens: maxTokens ?? 256,
+    }),
 };
 
 export type LockPolicy =
@@ -317,4 +343,10 @@ export interface PermissionGrantView {
   scope: string;
   granted_at: string;
   expires_at: string | null;
+}
+
+export interface ProviderConfig {
+  koboldcpp_endpoint: string;
+  koboldcpp_model: string;
+  koboldcpp_enabled: boolean;
 }
