@@ -3,7 +3,7 @@
 This file describes **only what currently works**, with evidence. It is updated
 every checkpoint. If something is not here, it does not work yet.
 
-Last updated: 2026-08-09 (Phases 0–8 implemented; checkpoint da9db4f)
+Last updated: 2026-08-11 (Phases 0–8 + Phase 9 testing; checkpoint 90fc945)
 
 ## Works now
 
@@ -78,6 +78,26 @@ Last updated: 2026-08-09 (Phases 0–8 implemented; checkpoint da9db4f)
 - `tools`: registry of 5 tools (source_search, corpus_lookup, draft_generation,
   planning, mock_external); NO external actions execute.
 - Tauri commands wired.
+
+### Phase 9 — Product validation (in progress)
+- **Forbidden-behavior test suite (§37):** 18 automated tests proving Sammy does
+  NOT permit private access before unlock, wrong-passphrase success, cross-vault
+  access, silent cloud fallback, tombstoned/deleted record retrieval, automatic
+  memory approval, rejected memory retrieval, duplicate corpus imports, fake
+  citation IDs, tool execution without permission, permanent auth from
+  conversation, plaintext secrets in errors/Debug, corrupted backup restore,
+  migration without rollback, mock cloud-crossing claims, or candidate records
+  in current truth.
+- **End-to-end workflow tests (§36):** 8 integration tests covering new-vault
+  lifecycle, recovery (backup → restore on new registry via passphrase and
+  recovery code), multiple vaults with isolation verification, source-grounded
+  answers, corpus package round-trip with reimport-no-duplicates, memory
+  workflow, provider privacy, and permissions.
+- **Dependency license report:** `LICENSES.md` — 462 crates scanned, **no
+  GPL/copyleft crates**; all permissive licenses.
+- **Privacy & Audit UI** wired: audit summary by category + recent events table.
+- **Memory Review UI** wired: candidate review queue with approve/edit/reject/
+  defer/temporary/delete actions.
 
 ## Verified Phase exit criteria
 - ✅ Private/chat/source access impossible before unlock.

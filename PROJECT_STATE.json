@@ -1,7 +1,7 @@
 {
   "project": "Sammy",
-  "current_phase": "Phases 0-8 implemented; Phase 9 (validation) pending",
-  "status": "phases_0_through_8_verified",
+  "current_phase": "Phases 0-8 implemented; Phase 9 (validation) in progress",
+  "status": "phase_9_testing_underway",
   "completed_capabilities": [
     "workspace_cargo_build",
     "frontend_vite_build",
@@ -62,7 +62,12 @@
     "tools_registry_read_only_and_mock_only"
   ],
   "active_work": [
-    "phase_9_product_validation"
+    "phase_9_product_validation",
+    "forbidden_behavior_test_suite_37",
+    "e2e_workflow_tests_36",
+    "dependency_license_report",
+    "privacy_audit_ui_wired",
+    "memory_review_ui_wired"
   ],
   "known_failures": [],
   "external_blockers": [
@@ -70,7 +75,6 @@
     "no_venice_api_key",
     "no_koboldcpp_endpoint",
     "pdf_docx_ocr_bindings_not_wired_interfaces_ready",
-    "license_report_not_generated",
     "build_requires_strawberry_perl_on_path"
   ],
   "security_debt": [
@@ -80,6 +84,7 @@
   ],
   "test_summary": {
     "rust_unit": { "passed": 159, "failed": 0, "ignored": 0 },
+    "rust_integration": { "passed": 26, "failed": 0, "ignored": 0 },
     "frontend": { "passed": 6, "failed": 0, "ignored": 0 },
     "fmt_check": "pass",
     "clippy": "clean (-D warnings)",
@@ -87,7 +92,7 @@
     "prettier": "pass",
     "tsc_strict": "pass"
   },
-  "last_verified_commit": "da9db4f",
+  "last_verified_commit": "90fc945",
   "next_actions": [
     "Phase 9: Windows packaging, clean-machine install test",
     "Phase 9: dependency license report",
