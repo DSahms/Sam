@@ -65,7 +65,10 @@ impl ProviderRoster {
     ///
     /// Returns the roster plus a model-name resolution: if the caller passed an
     /// empty model, the configured default model is used.
-    pub fn from_config(config: &crate::settings::ProviderConfig) -> Self {
+    pub fn from_config(
+        config: &crate::settings::ProviderConfig,
+        venice_api_key: Option<String>,
+    ) -> Self {
         let mut local: Vec<Arc<dyn Provider>> = Vec::new();
         if config.koboldcpp_enabled && !config.koboldcpp_endpoint.is_empty() {
             local.push(Arc::new(crate::providers::KoboldCppProvider::new(
@@ -76,10 +79,18 @@ impl ProviderRoster {
         }
         // Always keep the mock as a fallback so chat degrades gracefully.
         local.push(Arc::new(crate::providers::MockProvider::echo()));
-        Self {
-            local,
-            cloud: vec![],
+        let mut cloud: Vec<Arc<dyn Provider>> = Vec::new();
+        if config.venice_enabled && !config.venice_endpoint.is_empty() {
+            if let Some(key) = venice_api_key.filter(|key| !key.is_empty()) {
+                cloud.push(Arc::new(crate::providers::VeniceProvider::new(
+                    config.venice_endpoint.clone(),
+                    config.venice_model.clone(),
+                    key,
+                    Box::new(crate::providers::HttpVeniceTransport::new()),
+                )));
+            }
         }
+        Self { local, cloud }
     }
 
     /// Resolve a model name: use the requested model if non-empty, otherwise
@@ -165,7 +176,38 @@ pub fn run_turn(
             content: m.content.clone(),
         })
         .collect();
-    let prompt = PromptAssembly::new(&identity, turn.routing.as_str(), &[], &[]);
+    let any_local = local_reachable.iter().copied().any(|reachable| reachable);
+    let any_cloud = cloud_reachable.iter().copied().any(|reachable| reachable);
+    let cloud_bound = match turn.routing {
+        RoutingMode::LocalOnly => false,
+        RoutingMode::PreferLocal | RoutingMode::AskBeforeCrossing => {
+            !any_local && any_cloud
+        }
+        RoutingMode::PreferCloud => any_cloud,
+        RoutingMode::CloudOnly => true,
+    };
+    let sensitivity = if cloud_bound {
+        crate::retrieval::SensitivityFilter::ExcludeLocalOnly
+    } else {
+        crate::retrieval::SensitivityFilter::All
+    };
+    let vector_index = crate::retrieval::SqliteVectorIndex::new(conn)?;
+    let embedding = crate::retrieval::StubEmbeddingProvider;
+    let hits = crate::retrieval::retrieve(
+        conn,
+        &crate::retrieval::RetrievalRequest {
+            query: turn.user_text.clone(),
+            sensitivity,
+            ..Default::default()
+        },
+        Some(&embedding),
+        Some(&vector_index),
+    )?;
+    let retrieved: Vec<String> = hits
+        .iter()
+        .map(|hit| format!("[record:{}] {}", hit.record_id, hit.snippet))
+        .collect();
+    let prompt = PromptAssembly::new(&identity, turn.routing.as_str(), &[], &retrieved);
     let system = prompt.render_system();
     let prompt_summary = prompt.inspection_view();
 
@@ -314,7 +356,21 @@ mod tests {
                 action TEXT NOT NULL, detail_json TEXT NOT NULL DEFAULT '{}');
              CREATE TABLE identity (
                 singleton INTEGER PRIMARY KEY, identity_json TEXT NOT NULL,
-                updated_at TEXT NOT NULL);",
+                updated_at TEXT NOT NULL);
+             CREATE TABLE knowledge_records_full (
+                record_id TEXT PRIMARY KEY, vault_id TEXT NOT NULL,
+                record_type TEXT NOT NULL, canonical_text TEXT NOT NULL,
+                status TEXT NOT NULL, source_ids TEXT NOT NULL DEFAULT '[]',
+                source_locations TEXT NOT NULL DEFAULT '[]', provenance TEXT NOT NULL DEFAULT '{}',
+                confidence REAL NOT NULL DEFAULT 0.0, sensitivity TEXT NOT NULL DEFAULT 'normal',
+                permissions TEXT NOT NULL DEFAULT '[]', domain_tags TEXT NOT NULL DEFAULT '[]',
+                routing_tags TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL, valid_from TEXT, valid_to TEXT,
+                supersedes TEXT, superseded_by TEXT, review_state TEXT NOT NULL DEFAULT 'candidate',
+                reviewed_by TEXT, reviewed_at TEXT, contradiction_set TEXT,
+                schema_version INTEGER NOT NULL DEFAULT 1);
+             CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+                record_id UNINDEXED, canonical_text);",
         )
         .unwrap();
         c
@@ -465,7 +521,7 @@ mod tests {
     #[test]
     fn from_config_without_koboldcpp_is_mock_only() {
         let config = crate::settings::ProviderConfig::default();
-        let roster = ProviderRoster::from_config(&config);
+        let roster = ProviderRoster::from_config(&config, None);
         assert_eq!(roster.local.len(), 1);
         assert_eq!(roster.local[0].info().id, "mock");
     }
@@ -476,8 +532,9 @@ mod tests {
             koboldcpp_endpoint: "http://localhost:5001".into(),
             koboldcpp_model: "test".into(),
             koboldcpp_enabled: false,
+            ..Default::default()
         };
-        let roster = ProviderRoster::from_config(&config);
+        let roster = ProviderRoster::from_config(&config, None);
         assert_eq!(roster.local.len(), 1);
         assert_eq!(roster.local[0].info().id, "mock");
     }
@@ -488,11 +545,25 @@ mod tests {
             koboldcpp_endpoint: "http://localhost:5001".into(),
             koboldcpp_model: "koboldcpp/test-model".into(),
             koboldcpp_enabled: true,
+            ..Default::default()
         };
-        let roster = ProviderRoster::from_config(&config);
+        let roster = ProviderRoster::from_config(&config, None);
         assert_eq!(roster.local.len(), 2);
         assert_eq!(roster.local[0].info().id, "koboldcpp");
         assert_eq!(roster.local[1].info().id, "mock");
+    }
+
+    #[test]
+    fn from_config_adds_venice_only_when_enabled_with_key() {
+        let config = crate::settings::ProviderConfig {
+            venice_enabled: true,
+            venice_model: "venice-model".into(),
+            ..Default::default()
+        };
+        assert!(ProviderRoster::from_config(&config, None).cloud.is_empty());
+        let roster = ProviderRoster::from_config(&config, Some("secret".into()));
+        assert_eq!(roster.cloud.len(), 1);
+        assert_eq!(roster.cloud[0].info().id, "venice");
     }
 
     #[test]
@@ -502,8 +573,9 @@ mod tests {
             koboldcpp_endpoint: "".into(),
             koboldcpp_model: "test".into(),
             koboldcpp_enabled: true,
+            ..Default::default()
         };
-        let roster = ProviderRoster::from_config(&config);
+        let roster = ProviderRoster::from_config(&config, None);
         assert_eq!(roster.local.len(), 1);
         assert_eq!(roster.local[0].info().id, "mock");
     }
@@ -536,8 +608,9 @@ mod tests {
             koboldcpp_endpoint: "http://127.0.0.1:1".into(), // nothing listening
             koboldcpp_model: "test".into(),
             koboldcpp_enabled: true,
+            ..Default::default()
         };
-        let roster = ProviderRoster::from_config(&config);
+        let roster = ProviderRoster::from_config(&config, None);
         // local_reachable: [false (koboldcpp unreachable), true (mock)]
         let turn = ChatTurn {
             conversation_id: conv,

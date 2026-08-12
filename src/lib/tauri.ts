@@ -71,10 +71,10 @@ export const api = {
     recoveryCode: string,
     outPath: string,
   ) => invoke<void>("vault_backup", { vaultId, passphrase, recoveryCode, outPath }),
-  vaultRestorePassphrase: (inPath: string, passphrase: string) =>
-    invoke<string>("vault_restore_passphrase", { inPath, passphrase }),
-  vaultRestoreRecovery: (inPath: string, recoveryCode: string) =>
-    invoke<string>("vault_restore_recovery", { inPath, recoveryCode }),
+  vaultRestorePassphrase: (inPath: string, passphrase: string, confirmed: boolean) =>
+    invoke<string>("vault_restore_passphrase", { inPath, passphrase, confirmed }),
+  vaultRestoreRecovery: (inPath: string, recoveryCode: string, confirmed: boolean) =>
+    invoke<string>("vault_restore_recovery", { inPath, recoveryCode, confirmed }),
   vaultBackupPreview: (inPath: string) =>
     invoke<{
       format_version: number;
@@ -161,6 +161,8 @@ export const api = {
   providerConfigGet: () => invoke<ProviderConfig>("provider_config_get"),
   providerConfigSave: (config: ProviderConfig) =>
     invoke<void>("provider_config_save", { config }),
+  veniceApiKeySet: (apiKey: string) => invoke<void>("venice_api_key_set", { apiKey }),
+  veniceTestConnection: () => invoke<string[]>("venice_test_connection"),
   koboldcppTestConnection: (endpoint: string) =>
     invoke<string[]>("koboldcpp_test_connection", { endpoint }),
   koboldcppChat: (
@@ -349,4 +351,8 @@ export interface ProviderConfig {
   koboldcpp_endpoint: string;
   koboldcpp_model: string;
   koboldcpp_enabled: boolean;
+  venice_endpoint: string;
+  venice_model: string;
+  venice_enabled: boolean;
+  venice_has_api_key: boolean;
 }

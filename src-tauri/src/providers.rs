@@ -488,6 +488,7 @@ impl Provider for KoboldCppProvider {
 pub struct VeniceProvider {
     pub endpoint: String,
     pub model: String,
+    api_key: zeroize::Zeroizing<String>,
     transport: Box<dyn VeniceTransport>,
 }
 
@@ -496,15 +497,114 @@ pub trait VeniceTransport: Send + Sync {
     fn list_models(&self, endpoint: &str, api_key: &str) -> AppResult<String>;
 }
 
+/// Real HTTPS transport for Venice's OpenAI-compatible API. Authorization is
+/// attached only as a request header and is never logged or included in an
+/// error. Response bodies are not surfaced on HTTP failures because providers
+/// may reflect private prompt content.
+pub struct HttpVeniceTransport {
+    client: reqwest::blocking::Client,
+}
+
+impl HttpVeniceTransport {
+    pub fn new() -> Self {
+        Self::with_timeout(std::time::Duration::from_secs(120))
+    }
+
+    pub fn with_timeout(timeout: std::time::Duration) -> Self {
+        Self {
+            client: reqwest::blocking::Client::builder()
+                .timeout(timeout)
+                .build()
+                .expect("reqwest blocking client"),
+        }
+    }
+
+    fn url(endpoint: &str, path: &str) -> String {
+        format!("{}{}", endpoint.trim_end_matches('/'), path)
+    }
+
+    fn validate_endpoint(endpoint: &str) -> AppResult<()> {
+        let url = reqwest::Url::parse(endpoint)
+            .map_err(|_| AppError::Config("invalid Venice endpoint".into()))?;
+        if url.scheme() != "https"
+            || url.host_str() != Some("api.venice.ai")
+            || !url.path().trim_end_matches('/').eq("/api/v1")
+            || url.username() != ""
+            || url.password().is_some()
+        {
+            return Err(AppError::Config(
+                "Venice endpoint must be https://api.venice.ai/api/v1".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn send(
+        &self,
+        request: reqwest::blocking::RequestBuilder,
+        operation: &str,
+    ) -> AppResult<String> {
+        let response = request.send().map_err(|error| {
+            log::warn!("venice {operation} request failed");
+            AppError::Config(format!("venice unavailable: {}", sanitize_err(&error)))
+        })?;
+        let status = response.status();
+        if !status.is_success() {
+            let message = match status.as_u16() {
+                401 | 403 => "venice authentication failed".to_string(),
+                429 => "venice rate limit reached".to_string(),
+                code => format!("venice returned HTTP {code}"),
+            };
+            log::warn!("venice {operation} returned HTTP {}", status.as_u16());
+            return Err(AppError::Config(message));
+        }
+        response.text().map_err(|error| {
+            AppError::Config(format!("venice response error: {}", sanitize_err(&error)))
+        })
+    }
+}
+
+impl Default for HttpVeniceTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl VeniceTransport for HttpVeniceTransport {
+    fn chat(&self, endpoint: &str, api_key: &str, req_json: &str) -> AppResult<String> {
+        Self::validate_endpoint(endpoint)?;
+        self.send(
+            self.client
+                .post(Self::url(endpoint, "/chat/completions"))
+                .bearer_auth(api_key)
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(req_json.to_string()),
+            "chat",
+        )
+    }
+
+    fn list_models(&self, endpoint: &str, api_key: &str) -> AppResult<String> {
+        Self::validate_endpoint(endpoint)?;
+        self.send(
+            self.client
+                .get(Self::url(endpoint, "/models"))
+                .bearer_auth(api_key),
+            "models",
+        )
+    }
+}
+
 impl VeniceProvider {
     pub fn new(
         endpoint: impl Into<String>,
         model: impl Into<String>,
+        api_key: impl Into<String>,
         transport: Box<dyn VeniceTransport>,
     ) -> Self {
         Self {
             endpoint: endpoint.into(),
             model: model.into(),
+            api_key: zeroize::Zeroizing::new(api_key.into()),
             transport,
         }
     }
@@ -516,8 +616,13 @@ impl VeniceProvider {
         req: &ChatRequest,
         api_key: &str,
     ) -> AppResult<ChatResponse> {
+        let model = if self.model.is_empty() {
+            &req.model
+        } else {
+            &self.model
+        };
         let body = serde_json::json!({
-            "model": req.model,
+            "model": model,
             "messages": req.messages.iter().map(|m| serde_json::json!({
                 "role": m.role.as_str(),
                 "content": m.content,
@@ -536,7 +641,7 @@ impl VeniceProvider {
         Ok(ChatResponse {
             content,
             provider: "venice".into(),
-            model: req.model.clone(),
+            model: model.clone(),
             crossed_to_cloud: true,
             usage: None,
         })
@@ -553,21 +658,25 @@ impl Provider for VeniceProvider {
         }
     }
 
-    fn chat(&self, _req: &ChatRequest) -> AppResult<ChatResponse> {
-        // Without a key the cloud provider cannot run; the runtime must obtain
-        // the decrypted key and call chat_with_key. Returning an error ensures
-        // a missing key is never silently ignored.
-        Err(AppError::Config(
-            "venice requires an api key; call chat_with_key".into(),
-        ))
+    fn chat(&self, req: &ChatRequest) -> AppResult<ChatResponse> {
+        self.chat_with_key(req, &self.api_key)
     }
 
     fn list_models(&self) -> AppResult<Vec<String>> {
-        Err(AppError::Config("venice requires an api key".into()))
+        let raw = self.transport.list_models(&self.endpoint, &self.api_key)?;
+        let value: serde_json::Value = serde_json::from_str(&raw).map_err(|_| {
+            AppError::Config("venice returned an invalid model list".into())
+        })?;
+        Ok(value["data"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|model| model["id"].as_str().map(str::to_string))
+            .collect())
     }
 
     fn test_connection(&self) -> AppResult<()> {
-        Err(AppError::Config("venice requires an api key".into()))
+        self.list_models().map(|_| ())
     }
 }
 
@@ -644,12 +753,18 @@ mod tests {
                 Ok(r#"{"data":[{"id":"venice-1"}]}"#.into())
             }
         }
-        let p =
-            VeniceProvider::new("https://api.venice.ai/api/v1", "venice-1", Box::new(T));
+        let p = VeniceProvider::new(
+            "https://api.venice.ai/api/v1",
+            "venice-1",
+            "key",
+            Box::new(T),
+        );
         let r = p.chat_with_key(&req(), "key").unwrap();
         assert_eq!(r.content, "cloud-reply");
         assert!(r.crossed_to_cloud);
-        assert!(p.chat(&req()).is_err());
+        assert_eq!(p.chat(&req()).unwrap().content, "cloud-reply");
+        assert_eq!(p.list_models().unwrap(), vec!["venice-1"]);
+        assert!(p.test_connection().is_ok());
     }
 
     #[test]
@@ -841,5 +956,21 @@ mod tests {
         let url2 = HttpKoboldTransport::v1_url("http://localhost:5001/", "/models");
         assert_eq!(url1, "http://localhost:5001/v1/models");
         assert_eq!(url1, url2);
+    }
+
+    #[test]
+    fn venice_transport_refuses_to_send_credentials_to_non_venice_host() {
+        let transport =
+            HttpVeniceTransport::with_timeout(std::time::Duration::from_secs(1));
+        let secret = "must-never-leave-for-evil-host";
+        let error = VeniceTransport::list_models(
+            &transport,
+            "https://example.com/api/v1",
+            secret,
+        )
+        .unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("api.venice.ai"));
+        assert!(!message.contains(secret));
     }
 }

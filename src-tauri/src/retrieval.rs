@@ -57,8 +57,10 @@ impl EmbeddingProvider for StubEmbeddingProvider {
 /// A replaceable vector index. The canonical store is SQLCipher; this index is
 /// rebuildable and deletable (directive §24). The first release ships an
 /// in-memory stub index; a persistent local adapter lands behind this trait.
-pub trait VectorIndex: Send + Sync {
+pub trait VectorIndex {
     fn add(&mut self, id: &str, vector: Vec<f32>) -> AppResult<()>;
+    fn remove(&mut self, id: &str) -> AppResult<()>;
+    fn clear(&mut self) -> AppResult<()>;
     /// Return the k nearest neighbors to `query_vector` as (id, score) pairs.
     fn search(&self, query_vector: &[f32], k: usize) -> AppResult<Vec<(String, f64)>>;
 }
@@ -83,7 +85,18 @@ impl Default for InMemoryVectorIndex {
 
 impl VectorIndex for InMemoryVectorIndex {
     fn add(&mut self, id: &str, vector: Vec<f32>) -> AppResult<()> {
+        self.items.retain(|(existing, _)| existing != id);
         self.items.push((id.to_string(), vector));
+        Ok(())
+    }
+
+    fn remove(&mut self, id: &str) -> AppResult<()> {
+        self.items.retain(|(existing, _)| existing != id);
+        Ok(())
+    }
+
+    fn clear(&mut self) -> AppResult<()> {
+        self.items.clear();
         Ok(())
     }
 
@@ -96,6 +109,106 @@ impl VectorIndex for InMemoryVectorIndex {
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(scored.into_iter().take(k).collect())
     }
+}
+
+/// Persistent vector index stored inside the active vault's SQLCipher
+/// database. The table is per-vault, encrypted by SQLCipher, rebuildable from
+/// canonical knowledge records, and never treated as authoritative content.
+pub struct SqliteVectorIndex<'a> {
+    conn: &'a Connection,
+}
+
+impl<'a> SqliteVectorIndex<'a> {
+    pub fn new(conn: &'a Connection) -> AppResult<Self> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS vector_index (
+                record_id TEXT PRIMARY KEY,
+                dimensions INTEGER NOT NULL,
+                vector_json TEXT NOT NULL,
+                indexed_at TEXT NOT NULL
+             );",
+        )?;
+        Ok(Self { conn })
+    }
+
+    pub fn len(&self) -> AppResult<usize> {
+        let count: i64 =
+            self.conn
+                .query_row("SELECT count(*) FROM vector_index", [], |row| row.get(0))?;
+        Ok(count as usize)
+    }
+
+    pub fn is_empty(&self) -> AppResult<bool> {
+        self.len().map(|len| len == 0)
+    }
+}
+
+impl VectorIndex for SqliteVectorIndex<'_> {
+    fn add(&mut self, id: &str, vector: Vec<f32>) -> AppResult<()> {
+        if vector.len() != EMBED_DIM {
+            return Err(crate::error::AppError::InvalidArgument(format!(
+                "embedding must have {EMBED_DIM} dimensions"
+            )));
+        }
+        let encoded = serde_json::to_string(&vector)?;
+        self.conn.execute(
+            "INSERT INTO vector_index(record_id, dimensions, vector_json, indexed_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(record_id) DO UPDATE SET dimensions=?2, vector_json=?3, indexed_at=?4",
+            rusqlite::params![id, EMBED_DIM as i64, encoded, chrono::Utc::now().to_rfc3339()],
+        )?;
+        Ok(())
+    }
+
+    fn remove(&mut self, id: &str) -> AppResult<()> {
+        self.conn
+            .execute("DELETE FROM vector_index WHERE record_id=?1", [id])?;
+        Ok(())
+    }
+
+    fn clear(&mut self) -> AppResult<()> {
+        self.conn.execute("DELETE FROM vector_index", [])?;
+        Ok(())
+    }
+
+    fn search(&self, query_vector: &[f32], k: usize) -> AppResult<Vec<(String, f64)>> {
+        if query_vector.len() != EMBED_DIM {
+            return Err(crate::error::AppError::InvalidArgument(format!(
+                "query embedding must have {EMBED_DIM} dimensions"
+            )));
+        }
+        let mut stmt = self
+            .conn
+            .prepare("SELECT record_id, vector_json FROM vector_index")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut scored = Vec::new();
+        for row in rows {
+            let (id, encoded) = row?;
+            let vector: Vec<f32> = serde_json::from_str(&encoded)?;
+            if vector.len() == EMBED_DIM {
+                scored.push((id, cosine(query_vector, &vector)));
+            }
+        }
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(k);
+        Ok(scored)
+    }
+}
+
+/// Rebuild the derived index deterministically from current canonical records.
+pub fn rebuild_vector_index(
+    conn: &Connection,
+    embedding: &dyn EmbeddingProvider,
+) -> AppResult<usize> {
+    let records = knowledge::list_current(conn)?;
+    let mut index = SqliteVectorIndex::new(conn)?;
+    index.clear()?;
+    for record in records {
+        index.add(&record.record_id, embedding.embed(&record.canonical_text)?)?;
+    }
+    index.len()
 }
 
 fn cosine(a: &[f32], b: &[f32]) -> f64 {
@@ -455,5 +568,63 @@ mod tests {
         // a and b are identical to the query, c is different.
         assert_eq!(hits[0].0, "a");
         assert!(hits[0].1 >= hits[2].1);
+    }
+
+    #[test]
+    fn persistent_vector_index_survives_reopen_and_supports_delete_rebuild() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.db");
+        let embedding = StubEmbeddingProvider;
+        {
+            let conn = Connection::open(&path).unwrap();
+            let mut index = SqliteVectorIndex::new(&conn).unwrap();
+            index
+                .add(
+                    "record-one",
+                    embedding.embed("persistent vector fact").unwrap(),
+                )
+                .unwrap();
+            assert_eq!(index.len().unwrap(), 1);
+            index.remove("record-one").unwrap();
+            assert_eq!(index.len().unwrap(), 0);
+            index
+                .add(
+                    "record-one",
+                    embedding.embed("persistent vector fact").unwrap(),
+                )
+                .unwrap();
+        }
+        {
+            let conn = Connection::open(&path).unwrap();
+            let index = SqliteVectorIndex::new(&conn).unwrap();
+            assert_eq!(index.len().unwrap(), 1);
+            let hits = index
+                .search(&embedding.embed("persistent vector fact").unwrap(), 5)
+                .unwrap();
+            assert_eq!(hits.len(), 1);
+        }
+    }
+
+    #[test]
+    fn vector_index_rebuilds_from_current_canonical_records() {
+        let conn = fresh_conn();
+        add_record(&conn, "current", "current vector fact", "normal");
+        let embedding = StubEmbeddingProvider;
+        assert_eq!(rebuild_vector_index(&conn, &embedding).unwrap(), 1);
+        let index = SqliteVectorIndex::new(&conn).unwrap();
+        assert_eq!(index.len().unwrap(), 1);
+    }
+
+    #[test]
+    fn in_memory_vector_index_replaces_and_clears_entries() {
+        let embedding = StubEmbeddingProvider;
+        let mut index = InMemoryVectorIndex::new();
+        index.add("one", embedding.embed("first").unwrap()).unwrap();
+        index
+            .add("one", embedding.embed("replacement").unwrap())
+            .unwrap();
+        assert_eq!(index.items.len(), 1);
+        index.clear().unwrap();
+        assert!(index.items.is_empty());
     }
 }

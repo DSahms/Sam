@@ -9,6 +9,7 @@ dist
 dist-ssr
 *.local
 .vite
+*.tsbuildinfo
 
 # --- Frontend test / coverage ---
 coverage

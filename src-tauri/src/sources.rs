@@ -11,7 +11,9 @@
 //! replaceable behind the [`Extractor`] trait; PDF/DOCX/OCR are recorded as
 //! external blockers until their bindings are wired (§6/§23).
 
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -150,6 +152,131 @@ impl Extractor for CsvExtractor {
     }
 }
 
+/// PDF extractor backed by `pdf-extract`. The document is parsed entirely in
+/// memory; no plaintext temporary file is created.
+pub struct PdfExtractor;
+impl Extractor for PdfExtractor {
+    fn extract(&self, bytes: &[u8]) -> AppResult<ExtractedText> {
+        let text = pdf_extract::extract_text_from_mem(bytes).map_err(|_| {
+            AppError::InvalidArgument("unable to extract text from PDF".into())
+        })?;
+        if text.trim().is_empty() {
+            return Err(AppError::InvalidArgument(
+                "PDF contains no extractable text; scanned pages require OCR".into(),
+            ));
+        }
+        let pages = text.matches('\u{000c}').count().saturating_add(1);
+        Ok(ExtractedText {
+            text,
+            locations: (1..=pages).map(|page| format!("page:{page}")).collect(),
+            derivation: "extracted".into(),
+        })
+    }
+}
+
+/// DOCX extractor. DOCX is a ZIP container; only WordprocessingML text nodes
+/// from `word/document.xml` are read. Macros and embedded objects are ignored.
+pub struct DocxExtractor;
+impl Extractor for DocxExtractor {
+    fn extract(&self, bytes: &[u8]) -> AppResult<ExtractedText> {
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+            .map_err(|_| AppError::InvalidArgument("invalid DOCX package".into()))?;
+        let mut document = archive
+            .by_name("word/document.xml")
+            .map_err(|_| AppError::InvalidArgument("DOCX has no document body".into()))?;
+        let mut xml = String::new();
+        document.read_to_string(&mut xml).map_err(|_| {
+            AppError::InvalidArgument("DOCX document XML is invalid".into())
+        })?;
+
+        let mut reader = quick_xml::Reader::from_str(&xml);
+        reader.config_mut().trim_text(false);
+        let mut text = String::new();
+        let mut paragraphs = 0usize;
+        let mut in_text = false;
+        loop {
+            match reader.read_event() {
+                Ok(quick_xml::events::Event::Start(event)) => {
+                    match event.local_name().as_ref() {
+                        b"t" => in_text = true,
+                        b"tab" if in_text => text.push('\t'),
+                        b"br" if in_text => text.push('\n'),
+                        _ => {}
+                    }
+                }
+                Ok(quick_xml::events::Event::Text(event)) if in_text => {
+                    let decoded = event.unescape().map_err(|_| {
+                        AppError::InvalidArgument("DOCX text is invalid".into())
+                    })?;
+                    text.push_str(&decoded);
+                }
+                Ok(quick_xml::events::Event::End(event)) => {
+                    match event.local_name().as_ref() {
+                        b"t" => in_text = false,
+                        b"p" => {
+                            paragraphs += 1;
+                            text.push('\n');
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(quick_xml::events::Event::Eof) => break,
+                Err(_) => {
+                    return Err(AppError::InvalidArgument("DOCX XML is invalid".into()))
+                }
+                _ => {}
+            }
+        }
+        if text.trim().is_empty() {
+            return Err(AppError::InvalidArgument("DOCX contains no text".into()));
+        }
+        Ok(ExtractedText {
+            text: text.trim_end().to_string(),
+            locations: vec![format!("paragraphs:{paragraphs}")],
+            derivation: "extracted".into(),
+        })
+    }
+}
+
+/// Local OCR adapter using Tesseract's stdin/stdout mode. Image bytes never
+/// leave the machine and no plaintext output file is created. A missing OCR
+/// runtime fails clearly instead of fabricating or indexing binary data.
+pub struct TesseractOcrExtractor;
+impl Extractor for TesseractOcrExtractor {
+    fn extract(&self, bytes: &[u8]) -> AppResult<ExtractedText> {
+        let mut child = Command::new("tesseract")
+            .args(["stdin", "stdout", "--psm", "3"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| AppError::Config("local OCR runtime is not installed".into()))?;
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| AppError::Config("local OCR input unavailable".into()))?
+            .write_all(bytes)?;
+        let output = child.wait_with_output()?;
+        if !output.status.success() {
+            return Err(AppError::InvalidArgument(
+                "OCR could not read this image".into(),
+            ));
+        }
+        let text = String::from_utf8(output.stdout)
+            .map_err(|_| AppError::InvalidArgument("OCR returned invalid text".into()))?;
+        if text.trim().is_empty() {
+            return Err(AppError::InvalidArgument(
+                "OCR found no readable text".into(),
+            ));
+        }
+        Ok(ExtractedText {
+            text,
+            locations: vec!["image:1".into()],
+            derivation: "ocr".into(),
+        })
+    }
+}
+
 /// Minimal RFC-4180-ish CSV row splitter (no external dep).
 pub(crate) fn csv_lines(input: &str) -> Vec<Vec<String>> {
     let mut out = Vec::new();
@@ -180,10 +307,19 @@ pub fn extractor_for(kind: SourceKind) -> Box<dyn Extractor> {
         SourceKind::Markdown => Box::new(MarkdownExtractor),
         SourceKind::Json => Box::new(JsonExtractor),
         SourceKind::Csv => Box::new(CsvExtractor),
-        // PDF/DOCX/image/OCR adapters land when their bindings are wired
-        // (EXTERNAL_BLOCKERS). For now, fall back to a safe text extraction
-        // that refuses to execute any active content.
-        _ => Box::new(TextExtractor),
+        SourceKind::Pdf => Box::new(PdfExtractor),
+        SourceKind::Docx => Box::new(DocxExtractor),
+        SourceKind::Image => Box::new(TesseractOcrExtractor),
+        SourceKind::Unknown => Box::new(UnsupportedExtractor),
+    }
+}
+
+struct UnsupportedExtractor;
+impl Extractor for UnsupportedExtractor {
+    fn extract(&self, _bytes: &[u8]) -> AppResult<ExtractedText> {
+        Err(AppError::InvalidArgument(
+            "unsupported source format".into(),
+        ))
     }
 }
 
@@ -222,6 +358,16 @@ pub fn ensure_schema(conn: &Connection) -> AppResult<()> {
             source_id UNINDEXED, name, extracted
          );",
     )?;
+    // Forward-compatible additions for extraction provenance. Existing vaults
+    // may already have the Phase 4 table, so duplicate-column errors are safe.
+    let _ = conn.execute(
+        "ALTER TABLE sources ADD COLUMN extraction_locations TEXT NOT NULL DEFAULT '[]'",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE sources ADD COLUMN extraction_derivation TEXT NOT NULL DEFAULT 'original'",
+        [],
+    );
     Ok(())
 }
 
@@ -249,6 +395,16 @@ pub fn import(
     let extracted = extractor_for(kind).extract(&bytes)?;
     let checksum = hex::encode(Sha256::digest(&bytes));
 
+    // Idempotent re-import: identical active content resolves to the existing
+    // source, preserving stable provenance and avoiding duplicate FTS rows.
+    if let Ok(existing) = conn.query_row(
+        "SELECT source_id FROM sources WHERE checksum=?1 AND status='active' LIMIT 1",
+        params![checksum.as_str()],
+        |row| row.get::<_, String>(0),
+    ) {
+        return SourceId::parse(&existing);
+    }
+
     // Encrypt the original bytes with the vault DEK.
     let enc_blob = aead::encrypt(dek, &bytes);
 
@@ -256,8 +412,9 @@ pub fn import(
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO sources(source_id, kind, name, checksum, imported_at, status,
-                             bytes_len, enc_blob, extracted)
-         VALUES (?1,?2,?3,?4,?5,'active',?6,?7,?8)",
+                             bytes_len, enc_blob, extracted, extraction_locations,
+                             extraction_derivation)
+         VALUES (?1,?2,?3,?4,?5,'active',?6,?7,?8,?9,?10)",
         params![
             id.to_string(),
             kind.as_str(),
@@ -267,6 +424,8 @@ pub fn import(
             bytes.len() as i64,
             enc_blob,
             extracted.text,
+            serde_json::to_string(&extracted.locations)?,
+            extracted.derivation,
         ],
     )?;
     // Index name + extracted text in FTS.
@@ -455,6 +614,35 @@ mod tests {
     }
 
     #[test]
+    fn docx_extractor_reads_document_text_without_embedded_content() {
+        let mut bytes = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(Cursor::new(&mut bytes));
+            zip.start_file::<_, ()>(
+                "word/document.xml",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+            zip.write_all(
+                br#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hello &amp; safe</w:t></w:r></w:p><w:p><w:r><w:t>Second paragraph</w:t></w:r></w:p></w:body></w:document>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        let result = DocxExtractor.extract(&bytes).unwrap();
+        assert_eq!(result.text, "Hello & safe\nSecond paragraph");
+        assert_eq!(result.locations, vec!["paragraphs:2"]);
+        assert_eq!(result.derivation, "extracted");
+    }
+
+    #[test]
+    fn invalid_docx_and_pdf_fail_instead_of_indexing_binary_data() {
+        assert!(DocxExtractor.extract(b"not a zip").is_err());
+        assert!(PdfExtractor.extract(b"not a pdf").is_err());
+        assert!(UnsupportedExtractor.extract(b"binary").is_err());
+    }
+
+    #[test]
     fn import_encrypts_and_indexes_text() {
         let conn = fresh_conn();
         let dek = SecretKey::random();
@@ -522,5 +710,27 @@ mod tests {
             .unwrap();
         let expected = hex::encode(Sha256::digest(b"abc"));
         assert_eq!(rec.checksum, expected);
+    }
+
+    #[test]
+    fn repeated_import_is_idempotent_and_preserves_extraction_provenance() {
+        let conn = fresh_conn();
+        let dek = SecretKey::random();
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, b"# Heading\nBody").unwrap();
+        let first = import(&conn, &dek, &path).unwrap();
+        let second = import(&conn, &dek, &path).unwrap();
+        assert_eq!(first, second);
+        let (locations, derivation): (String, String) = conn
+            .query_row(
+                "SELECT extraction_locations, extraction_derivation FROM sources WHERE source_id=?1",
+                [first.to_string()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert!(locations.contains("lines:1-2"));
+        assert_eq!(derivation, "original");
+        assert_eq!(list(&conn).unwrap().len(), 1);
     }
 }

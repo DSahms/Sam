@@ -59,6 +59,9 @@ anyhow = "1"
 # blocking feature for synchronous provider calls; rustls-tls for future
 # cloud (Venice) HTTPS support. KoboldCpp on localhost uses plain HTTP.
 reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"], default-features = false }
+pdf-extract = "0.8"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+quick-xml = "0.37"
 
 # --- Logging (sanitized; secrets never logged) ---
 log = "0.4"

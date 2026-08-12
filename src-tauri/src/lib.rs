@@ -105,6 +105,7 @@ pub fn run() {
             app::knowledge_tombstone,
             app::knowledge_correct,
             app::knowledge_search,
+            app::vector_index_rebuild,
             app::source_import,
             app::source_list,
             app::source_extracted,
@@ -126,6 +127,8 @@ pub fn run() {
             app::audit_counts,
             app::provider_config_get,
             app::provider_config_save,
+            app::venice_api_key_set,
+            app::venice_test_connection,
             app::koboldcpp_test_connection,
             app::koboldcpp_chat,
         ])

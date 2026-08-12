@@ -327,7 +327,9 @@ pub fn vault_restore_passphrase(
     state: tauri::State<AppState>,
     in_path: String,
     passphrase: String,
+    confirmed: bool,
 ) -> AppResult<String> {
+    require_restore_confirmation(confirmed)?;
     let id = state.with_registry(|reg| {
         reg.restore_from_passphrase(std::path::Path::new(&in_path), passphrase.as_bytes())
     })??;
@@ -340,12 +342,24 @@ pub fn vault_restore_recovery(
     state: tauri::State<AppState>,
     in_path: String,
     recovery_code: String,
+    confirmed: bool,
 ) -> AppResult<String> {
+    require_restore_confirmation(confirmed)?;
     let code = RecoveryCode::parse(&recovery_code).map_err(|_| AppError::Crypto)?;
     let id = state.with_registry(|reg| {
         reg.restore_from_recovery(std::path::Path::new(&in_path), &code)
     })??;
     Ok(id.to_string())
+}
+
+fn require_restore_confirmation(confirmed: bool) -> AppResult<()> {
+    if confirmed {
+        Ok(())
+    } else {
+        Err(AppError::InvalidArgument(
+            "restore requires explicit owner confirmation".into(),
+        ))
+    }
 }
 
 /// Read a backup's header for restore preview (vault name, id, created date).
@@ -481,7 +495,11 @@ pub fn chat_send(
         let conn = v.lock_conn();
         // Load provider configuration and build the roster.
         let config = crate::settings::load(&conn)?;
-        let roster = crate::chat::ProviderRoster::from_config(&config);
+        let venice_key = crate::settings::load_venice_api_key(&conn, v.dek())?;
+        let roster = crate::chat::ProviderRoster::from_config(
+            &config,
+            venice_key.map(|key| key.to_string()),
+        );
         let resolved_model = crate::chat::ProviderRoster::resolve_model(&config, &model);
 
         // Compute reachability for each local provider. The mock (last entry)
@@ -496,6 +514,10 @@ pub fn chat_send(
             };
             local_reachable.push(reachable);
         }
+        // Configuration presence is enough to make a cloud provider eligible.
+        // Do not probe the network here: no cloud request may occur before the
+        // owner sees and approves the crossing for this turn.
+        let cloud_reachable = vec![true; roster.cloud.len()];
 
         let turn = crate::chat::ChatTurn {
             conversation_id: cid,
@@ -510,7 +532,7 @@ pub fn chat_send(
             &conn,
             &roster,
             &local_reachable,
-            &[],
+            &cloud_reachable,
             &turn,
             &consent,
         ) {
@@ -631,8 +653,12 @@ pub fn knowledge_add_fact(
         let id = crate::knowledge::create(
             &conn,
             &v.vault_id.to_string(),
-            &crate::knowledge::NewRecord::approved_fact(text),
+            &crate::knowledge::NewRecord::approved_fact(text.clone()),
         )?;
+        let embedding = crate::retrieval::StubEmbeddingProvider;
+        let vector = crate::retrieval::EmbeddingProvider::embed(&embedding, &text)?;
+        let mut index = crate::retrieval::SqliteVectorIndex::new(&conn)?;
+        crate::retrieval::VectorIndex::add(&mut index, &id.to_string(), vector)?;
         Ok(id.to_string())
     })?
 }
@@ -672,7 +698,9 @@ pub fn knowledge_tombstone(
     let id = crate::ids::RecordId::parse(&record_id)?;
     state.with_active(|v| {
         let conn = v.lock_conn();
-        crate::knowledge::tombstone(&conn, id)
+        crate::knowledge::tombstone(&conn, id)?;
+        let mut index = crate::retrieval::SqliteVectorIndex::new(&conn)?;
+        crate::retrieval::VectorIndex::remove(&mut index, &id.to_string())
     })?
 }
 
@@ -690,9 +718,14 @@ pub fn knowledge_correct(
             &conn,
             &v.vault_id.to_string(),
             id,
-            new_text,
+            new_text.clone(),
             "owner",
         )?;
+        let mut index = crate::retrieval::SqliteVectorIndex::new(&conn)?;
+        crate::retrieval::VectorIndex::remove(&mut index, &id.to_string())?;
+        let embedding = crate::retrieval::StubEmbeddingProvider;
+        let vector = crate::retrieval::EmbeddingProvider::embed(&embedding, &new_text)?;
+        crate::retrieval::VectorIndex::add(&mut index, &new_id.to_string(), vector)?;
         Ok(new_id.to_string())
     })?
 }
@@ -707,6 +740,18 @@ pub fn knowledge_search(
     state.with_active(|v| {
         let conn = v.lock_conn();
         crate::knowledge::search_current(&conn, &query, limit.unwrap_or(20))
+    })?
+}
+
+/// Rebuild the derived vector index from current canonical knowledge.
+#[tauri::command]
+pub fn vector_index_rebuild(state: tauri::State<AppState>) -> AppResult<usize> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::retrieval::rebuild_vector_index(
+            &conn,
+            &crate::retrieval::StubEmbeddingProvider,
+        )
     })?
 }
 
@@ -828,6 +873,10 @@ pub fn corpus_import(
         let pkg = crate::corpus::package_from_json(&bytes)?;
         let conn = v.lock_conn();
         let outcome = crate::corpus::import(&conn, &v.vault_id.to_string(), &pkg)?;
+        crate::retrieval::rebuild_vector_index(
+            &conn,
+            &crate::retrieval::StubEmbeddingProvider,
+        )?;
         Ok(serde_json::to_string(&outcome)?)
     })?
 }
@@ -905,6 +954,10 @@ pub fn memory_approve(
             &v.vault_id.to_string(),
             id,
             edited_text.as_deref(),
+        )?;
+        crate::retrieval::rebuild_vector_index(
+            &conn,
+            &crate::retrieval::StubEmbeddingProvider,
         )?;
         Ok(kid)
     })?
@@ -1069,7 +1122,9 @@ pub fn provider_config_get(
 ) -> AppResult<crate::settings::ProviderConfig> {
     state.with_active(|v| {
         let conn = v.lock_conn();
-        crate::settings::load(&conn)
+        let mut config = crate::settings::load(&conn)?;
+        config.venice_has_api_key = crate::settings::has_venice_api_key(&conn)?;
+        Ok(config)
     })?
 }
 
@@ -1083,6 +1138,51 @@ pub fn provider_config_save(
         let conn = v.lock_conn();
         crate::settings::save(&conn, &config)
     })?
+}
+
+/// Store or clear the Venice credential. The value is encrypted immediately
+/// and is never returned by any command.
+#[tauri::command]
+pub fn venice_api_key_set(
+    state: tauri::State<AppState>,
+    api_key: String,
+) -> AppResult<()> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::settings::save_venice_api_key(&conn, v.dek(), &api_key)
+    })?
+}
+
+/// Validate the saved Venice configuration without sending a private prompt.
+/// Credential-bearing traffic is restricted by HttpVeniceTransport to the
+/// canonical Venice HTTPS host.
+#[tauri::command]
+pub fn venice_test_connection(state: tauri::State<AppState>) -> AppResult<Vec<String>> {
+    let (endpoint, model, key) = state.with_active(|v| {
+        let conn = v.lock_conn();
+        let key = crate::settings::load_venice_api_key(&conn, v.dek())?
+            .ok_or_else(|| AppError::Config("venice API key is not configured".into()))?;
+        let config = crate::settings::load(&conn)?;
+        Ok::<_, AppError>((config.venice_endpoint, config.venice_model, key.to_string()))
+    })??;
+    let provider = crate::providers::VeniceProvider::new(
+        endpoint,
+        model,
+        key,
+        Box::new(crate::providers::HttpVeniceTransport::new()),
+    );
+    let models = crate::providers::Provider::list_models(&provider)?;
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::audit::record(
+            &conn,
+            crate::audit::AuditCategory::Provider,
+            "venice_connection_test",
+            None,
+            &serde_json::json!({"result": "success"}),
+        )
+    })??;
+    Ok(models)
 }
 
 /// Test connectivity to a KoboldCpp endpoint. Returns the list of available
@@ -1181,10 +1281,12 @@ pub fn koboldcpp_chat(
 
 /// Resolve the per-user Sammy application data directory.
 ///
-/// On Windows this is `%LOCALAPPDATA%\Sammy`. Created if missing.
+/// On Windows this is `%LOCALAPPDATA%\app.sammy.desktop`. Keeping runtime
+/// data under the bundle identifier prevents an installer/uninstaller from
+/// confusing user vaults with application binaries.
 pub fn app_data_dir() -> PathBuf {
     let base = dirs_or_localappdata();
-    let dir = base.join("Sammy");
+    let dir = base.join("app.sammy.desktop");
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
@@ -1211,5 +1313,16 @@ fn dirs_or_localappdata() -> PathBuf {
 impl Default for AppStateInner {
     fn default() -> Self {
         unreachable!("AppState::default constructs this directly")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::require_restore_confirmation;
+
+    #[test]
+    fn restore_is_rejected_without_explicit_confirmation() {
+        assert!(require_restore_confirmation(false).is_err());
+        assert!(require_restore_confirmation(true).is_ok());
     }
 }

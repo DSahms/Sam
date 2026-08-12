@@ -13,12 +13,13 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::error::AppResult;
+use crate::crypto::{aead, SecretKey};
+use crate::error::{AppError, AppResult};
 
 /// Provider configuration stored per vault. Non-secret: the endpoint URL and
 /// default model name. Secret credentials (API keys for Venice) will be stored
 /// encrypted in a future hardening step.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     /// KoboldCpp endpoint base URL (e.g. "http://localhost:5001"). Empty if
     /// not configured.
@@ -31,6 +32,33 @@ pub struct ProviderConfig {
     /// Whether the KoboldCpp provider is enabled.
     #[serde(default)]
     pub koboldcpp_enabled: bool,
+    #[serde(default = "default_venice_endpoint")]
+    pub venice_endpoint: String,
+    #[serde(default)]
+    pub venice_model: String,
+    #[serde(default)]
+    pub venice_enabled: bool,
+    /// Read-only UI hint. The credential itself never crosses the Tauri boundary.
+    #[serde(default)]
+    pub venice_has_api_key: bool,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            koboldcpp_endpoint: String::new(),
+            koboldcpp_model: String::new(),
+            koboldcpp_enabled: false,
+            venice_endpoint: default_venice_endpoint(),
+            venice_model: String::new(),
+            venice_enabled: false,
+            venice_has_api_key: false,
+        }
+    }
+}
+
+fn default_venice_endpoint() -> String {
+    "https://api.venice.ai/api/v1".into()
 }
 
 /// Ensure the settings table exists (idempotent).
@@ -40,7 +68,12 @@ pub fn ensure_schema(conn: &Connection) -> AppResult<()> {
             singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
             config_json TEXT NOT NULL,
             updated_at TEXT NOT NULL
-        );",
+        );
+         CREATE TABLE IF NOT EXISTS provider_secrets (
+            provider_id TEXT PRIMARY KEY,
+            encrypted_secret BLOB NOT NULL,
+            updated_at TEXT NOT NULL
+         );",
     )?;
     Ok(())
 }
@@ -79,6 +112,59 @@ pub fn save(conn: &Connection, config: &ProviderConfig) -> AppResult<()> {
     Ok(())
 }
 
+/// Store a Venice API key encrypted with the active vault DEK. The key is not
+/// included in ProviderConfig and therefore cannot be returned to React.
+pub fn save_venice_api_key(
+    conn: &Connection,
+    dek: &SecretKey,
+    api_key: &str,
+) -> AppResult<()> {
+    ensure_schema(conn)?;
+    if api_key.trim().is_empty() {
+        conn.execute(
+            "DELETE FROM provider_secrets WHERE provider_id='venice'",
+            [],
+        )?;
+        return Ok(());
+    }
+    let encrypted = aead::encrypt(dek, api_key.trim().as_bytes());
+    conn.execute(
+        "INSERT INTO provider_secrets(provider_id, encrypted_secret, updated_at)
+         VALUES ('venice', ?1, ?2)
+         ON CONFLICT(provider_id) DO UPDATE SET encrypted_secret=?1, updated_at=?2",
+        params![encrypted, chrono::Utc::now().to_rfc3339()],
+    )?;
+    Ok(())
+}
+
+pub fn load_venice_api_key(
+    conn: &Connection,
+    dek: &SecretKey,
+) -> AppResult<Option<zeroize::Zeroizing<String>>> {
+    ensure_schema(conn)?;
+    let mut stmt = conn.prepare(
+        "SELECT encrypted_secret FROM provider_secrets WHERE provider_id='venice'",
+    )?;
+    let mut rows = stmt.query([])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    let encrypted: Vec<u8> = row.get(0)?;
+    let clear = aead::decrypt(dek, &encrypted).map_err(|_| AppError::Crypto)?;
+    let value =
+        String::from_utf8(clear.as_slice().to_vec()).map_err(|_| AppError::Crypto)?;
+    Ok(Some(zeroize::Zeroizing::new(value)))
+}
+
+pub fn has_venice_api_key(conn: &Connection) -> AppResult<bool> {
+    ensure_schema(conn)?;
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM provider_secrets WHERE provider_id='venice')",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,6 +175,7 @@ mod tests {
             koboldcpp_endpoint: "http://localhost:5001".into(),
             koboldcpp_model: "test-model".into(),
             koboldcpp_enabled: true,
+            ..ProviderConfig::default()
         };
         let s = serde_json::to_string(&c).unwrap();
         let back: ProviderConfig = serde_json::from_str(&s).unwrap();
@@ -103,6 +190,7 @@ mod tests {
             koboldcpp_endpoint: "http://localhost:9999".into(),
             koboldcpp_model: "m1".into(),
             koboldcpp_enabled: true,
+            ..ProviderConfig::default()
         };
         save(&conn, &c).unwrap();
         let loaded = load(&conn).unwrap();
@@ -117,5 +205,35 @@ mod tests {
         let loaded = load(&conn).unwrap();
         assert_eq!(loaded.koboldcpp_endpoint, "");
         assert!(!loaded.koboldcpp_enabled);
+    }
+
+    #[test]
+    fn venice_key_is_encrypted_at_rest_and_round_trips() {
+        let conn = Connection::open_in_memory().unwrap();
+        let dek = SecretKey::random();
+        let key = "venice-private-test-key";
+        save_venice_api_key(&conn, &dek, key).unwrap();
+        assert!(has_venice_api_key(&conn).unwrap());
+        let blob: Vec<u8> = conn
+            .query_row(
+                "SELECT encrypted_secret FROM provider_secrets WHERE provider_id='venice'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!String::from_utf8_lossy(&blob).contains(key));
+        assert_eq!(
+            load_venice_api_key(&conn, &dek).unwrap().unwrap().as_str(),
+            key
+        );
+    }
+
+    #[test]
+    fn empty_venice_key_removes_secret() {
+        let conn = Connection::open_in_memory().unwrap();
+        let dek = SecretKey::random();
+        save_venice_api_key(&conn, &dek, "key").unwrap();
+        save_venice_api_key(&conn, &dek, "").unwrap();
+        assert!(!has_venice_api_key(&conn).unwrap());
     }
 }

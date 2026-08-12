@@ -6,6 +6,10 @@ export function SettingsView() {
     koboldcpp_endpoint: "",
     koboldcpp_model: "",
     koboldcpp_enabled: false,
+    venice_endpoint: "https://api.venice.ai/api/v1",
+    venice_model: "",
+    venice_enabled: false,
+    venice_has_api_key: false,
   });
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +21,9 @@ export function SettingsView() {
   } | null>(null);
   const [chatTest, setChatTest] = useState<string | null>(null);
   const [chatBusy, setChatBusy] = useState(false);
+  const [veniceKey, setVeniceKey] = useState("");
+  const [veniceTesting, setVeniceTesting] = useState(false);
+  const [veniceResult, setVeniceResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +91,45 @@ export function SettingsView() {
       setChatBusy(false);
     }
   }, [config]);
+
+  const handleSaveVenice = useCallback(async () => {
+    setError(null);
+    setVeniceResult(null);
+    try {
+      await api.providerConfigSave(config);
+      if (veniceKey) {
+        await api.veniceApiKeySet(veniceKey);
+        setVeniceKey("");
+        setConfig((current) => ({ ...current, venice_has_api_key: true }));
+      }
+      setVeniceResult("Venice settings saved.");
+    } catch (e) {
+      setError(explainError(e));
+    }
+  }, [config, veniceKey]);
+
+  const handleTestVenice = useCallback(async () => {
+    setVeniceTesting(true);
+    setVeniceResult(null);
+    setError(null);
+    try {
+      await api.providerConfigSave(config);
+      if (veniceKey) {
+        await api.veniceApiKeySet(veniceKey);
+        setVeniceKey("");
+        setConfig((current) => ({ ...current, venice_has_api_key: true }));
+      }
+      const models = await api.veniceTestConnection();
+      setVeniceResult(`Connected securely. ${models.length} model(s) available.`);
+      if (!config.venice_model && models[0]) {
+        setConfig((current) => ({ ...current, venice_model: models[0] }));
+      }
+    } catch (e) {
+      setError(explainError(e));
+    } finally {
+      setVeniceTesting(false);
+    }
+  }, [config, veniceKey]);
 
   return (
     <div className="settings-view">
@@ -172,6 +218,64 @@ export function SettingsView() {
           )}
         </section>
       )}
+
+      <section className="card">
+        <h2 className="card-title">Venice (cloud provider)</h2>
+        <p className="muted small">
+          Cloud use is always governed by the routing and consent controls in Chat. The
+          API key is encrypted inside the active vault and is never displayed again.
+        </p>
+        <div className="form-grid">
+          <label className="span-2">
+            Endpoint
+            <input type="text" value={config.venice_endpoint} readOnly />
+          </label>
+          <label>
+            Default model
+            <input
+              type="text"
+              value={config.venice_model}
+              onChange={(e) => setConfig({ ...config, venice_model: e.target.value })}
+              placeholder="Select after testing"
+            />
+          </label>
+          <label>
+            API key{" "}
+            {config.venice_has_api_key && <span className="badge badge-ok">stored</span>}
+            <input
+              type="password"
+              value={veniceKey}
+              onChange={(e) => setVeniceKey(e.target.value)}
+              placeholder={
+                config.venice_has_api_key ? "Enter to replace stored key" : "Required"
+              }
+              autoComplete="new-password"
+            />
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={config.venice_enabled}
+              onChange={(e) => setConfig({ ...config, venice_enabled: e.target.checked })}
+            />
+            Enabled
+          </label>
+        </div>
+        <div className="row">
+          <button type="button" className="btn btn-primary" onClick={handleSaveVenice}>
+            Save Venice settings
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={handleTestVenice}
+            disabled={veniceTesting || (!veniceKey && !config.venice_has_api_key)}
+          >
+            {veniceTesting ? "Testing…" : "Test secure connection"}
+          </button>
+          {veniceResult && <span className="badge badge-ok">{veniceResult}</span>}
+        </div>
+      </section>
 
       {error && (
         <div className="card card-error">

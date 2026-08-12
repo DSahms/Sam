@@ -30,6 +30,9 @@ export function BackupRecoveryView() {
   const [restorePath, setRestorePath] = useState<string | null>(null);
   const [restorePreview, setRestorePreview] = useState<BackupPreview | null>(null);
   const [restorePass, setRestorePass] = useState("");
+  const [restoreMethod, setRestoreMethod] = useState<"passphrase" | "recovery">(
+    "passphrase",
+  );
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restoreResult, setRestoreResult] = useState<string | null>(null);
 
@@ -135,15 +138,22 @@ export function BackupRecoveryView() {
 
   const handleExecuteRestore = useCallback(async () => {
     if (!restorePath) return;
-    if (restorePass.length < 8) {
+    if (restoreMethod === "passphrase" && restorePass.length < 8) {
       setError("Passphrase must be at least 8 characters.");
+      return;
+    }
+    if (restoreMethod === "recovery" && !restorePass.trim()) {
+      setError("Recovery code is required.");
       return;
     }
     setRestoreBusy(true);
     setError(null);
     setRestoreResult(null);
     try {
-      const restoredId = await api.vaultRestorePassphrase(restorePath, restorePass);
+      const restoredId =
+        restoreMethod === "passphrase"
+          ? await api.vaultRestorePassphrase(restorePath, restorePass, true)
+          : await api.vaultRestoreRecovery(restorePath, restorePass.trim(), true);
       setRestoreResult(
         `Backup restored successfully. Vault ${restoredId.slice(0, 8)}… is now available. Lock and re-unlock to use it.`,
       );
@@ -154,18 +164,19 @@ export function BackupRecoveryView() {
       await refresh();
     } catch (e) {
       setError(
-        `Restore failed: ${explainError(e)}. If the passphrase is wrong, the backup cannot be decrypted.`,
+        `Restore failed: ${explainError(e)}. If the credential is wrong, the backup cannot be decrypted.`,
       );
     } finally {
       setRestoreBusy(false);
     }
-  }, [restorePath, restorePass, refresh]);
+  }, [restorePath, restorePass, restoreMethod, refresh]);
 
   const handleCancelRestore = useCallback(() => {
     setRestoreStep("idle");
     setRestorePath(null);
     setRestorePreview(null);
     setRestorePass("");
+    setRestoreMethod("passphrase");
     setError(null);
   }, []);
 
@@ -293,17 +304,51 @@ export function BackupRecoveryView() {
 
             {restoreStep === "confirmed" && (
               <>
+                <div className="row" style={{ marginBottom: "12px" }}>
+                  <label className="checkbox-label">
+                    <input
+                      type="radio"
+                      name="restore-method"
+                      checked={restoreMethod === "passphrase"}
+                      onChange={() => {
+                        setRestoreMethod("passphrase");
+                        setRestorePass("");
+                      }}
+                    />
+                    Master passphrase
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="radio"
+                      name="restore-method"
+                      checked={restoreMethod === "recovery"}
+                      onChange={() => {
+                        setRestoreMethod("recovery");
+                        setRestorePass("");
+                      }}
+                    />
+                    Recovery code
+                  </label>
+                </div>
                 <label
                   className="span-2"
                   style={{ display: "flex", flexDirection: "column", gap: "4px" }}
                 >
-                  Passphrase for this backup
+                  {restoreMethod === "passphrase"
+                    ? "Passphrase for this backup"
+                    : "Recovery code for this backup"}
                   <input
-                    type="password"
+                    type={restoreMethod === "passphrase" ? "password" : "text"}
                     value={restorePass}
                     onChange={(e) => setRestorePass(e.target.value)}
-                    placeholder="The passphrase used when this backup was created"
-                    autoComplete="current-password"
+                    placeholder={
+                      restoreMethod === "passphrase"
+                        ? "The passphrase used when this backup was created"
+                        : "The recovery code stored with this backup"
+                    }
+                    autoComplete={
+                      restoreMethod === "passphrase" ? "current-password" : "off"
+                    }
                   />
                 </label>
                 <div className="row" style={{ marginTop: "12px" }}>
@@ -311,7 +356,12 @@ export function BackupRecoveryView() {
                     type="button"
                     className="btn btn-danger"
                     onClick={handleExecuteRestore}
-                    disabled={restoreBusy || restorePass.length < 8}
+                    disabled={
+                      restoreBusy ||
+                      (restoreMethod === "passphrase"
+                        ? restorePass.length < 8
+                        : !restorePass.trim())
+                    }
                   >
                     {restoreBusy ? "Restoring…" : "Restore Backup"}
                   </button>
