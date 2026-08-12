@@ -36,6 +36,7 @@ export function VaultView() {
   // Unlock/recovery inputs
   const [unlockPass, setUnlockPass] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
+  const [recoveryNewPass, setRecoveryNewPass] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -102,8 +103,12 @@ export function VaultView() {
       setError(null);
       setMode({ kind: "recovering", vaultId });
       try {
-        await api.vaultUnlockRecovery(vaultId, recoveryInput);
+        if (recoveryNewPass.length < 8) {
+          throw new Error("New passphrase must be at least 8 characters.");
+        }
+        await api.vaultRecoverChangePassphrase(vaultId, recoveryInput, recoveryNewPass);
         setRecoveryInput("");
+        setRecoveryNewPass("");
         await refresh();
       } catch (e) {
         setError(explainError(e));
@@ -111,7 +116,7 @@ export function VaultView() {
         setMode({ kind: "idle" });
       }
     },
-    [recoveryInput, refresh],
+    [recoveryInput, recoveryNewPass, refresh],
   );
 
   const handleLock = useCallback(async () => {
@@ -272,13 +277,24 @@ export function VaultView() {
                       value={recoveryInput}
                       onChange={(e) => setRecoveryInput(e.target.value)}
                     />
+                    <input
+                      type="password"
+                      placeholder="new passphrase"
+                      value={recoveryNewPass}
+                      onChange={(e) => setRecoveryNewPass(e.target.value)}
+                      autoComplete="new-password"
+                    />
                     <button
                       type="button"
                       className="btn"
                       onClick={() => handleUnlockRecovery(v.vault_id)}
-                      disabled={mode.kind !== "idle" || recoveryInput.length === 0}
+                      disabled={
+                        mode.kind !== "idle" ||
+                        recoveryInput.length === 0 ||
+                        recoveryNewPass.length < 8
+                      }
                     >
-                      Use recovery
+                      Recover &amp; replace passphrase
                     </button>
                   </div>
                 )}

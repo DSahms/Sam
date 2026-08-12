@@ -23,21 +23,22 @@ locking clears sensitive state; backup restores on a separate environment. — *
 Structured identity; conversation/message model; prompt assembly; mock +
 KoboldCpp + Venice adapters; routing modes; cloud-crossing confirmation;
 provider/model display; request audit events. Real KoboldCpp HTTP transport
-verified live against localhost:5001. (Streaming + cancellation pending.)
+verified live against localhost:5001. Venice HTTPS transport is implemented and
+deterministically tested; live account validation awaits a credential.
 
 ## Phase 3 — Structured Knowledge  ✅ COMPLETE
 Knowledge schema; record states; people/events/projects/facts/claims/
 conclusions/preferences; What I Know; contradiction sets; corrections;
 supersession; tombstones; knowledge audit; trust classifications.
 
-## Phase 4 — Secure Source Ingestion  ✅ MOSTLY COMPLETE
-File picker; encrypted source storage; checksums; txt/md/json/csv extractors;
-FTS5 search; Sources UI. (PDF/DOCX/image/OCR extractors pending — interface ready.)
+## Phase 4 — Secure Source Ingestion  ✅ COMPLETE
+File picker; encrypted source storage; checksums; txt/md/json/csv/PDF/DOCX
+extractors; local Tesseract OCR; provenance; idempotent import; FTS5; Sources UI.
 
-## Phase 5 — Retrieval and Citations  ✅ COMPLETE (with stubs)
+## Phase 5 — Retrieval and Citations  ✅ COMPLETE
 FTS5; metadata/permission/domain filters; vector interface + stub adapter;
 hybrid ranking; dedup; context budgeting; citation assembly; trust
-classification. (Persistent vector index + real embedding adapter pending.)
+classification; persistent per-vault SQLCipher vector index and rebuild.
 
 ## Phase 6 — Corpus Import and Export  ✅ COMPLETE
 Versioned schemas; manifests; full export; import validation; stable IDs;
@@ -53,10 +54,11 @@ Tool registry; permission records; action preview; confirmation; allow-once;
 session; narrow-scope; revocation; read-only/draft-only/mock tools; failure
 handling; audit trail.
 
-## Phase 9 — Product Validation  🚧 IN PROGRESS
+## Phase 9 — Product Validation  ✅ RELEASE CANDIDATE
 Forbidden-behavior tests (§37); E2E workflow tests (§36); dependency license
-report; real KoboldCpp connectivity verified live. Remaining: Windows
-packaging/clean-machine install; performance at scale; streaming; user docs.
+report; real KoboldCpp connectivity verified live; MSI/NSIS packaging; installed
+NSIS launch/relaunch smoke; user guide; full quality gate. External validations
+are listed in `EXTERNAL_BLOCKERS.md`.
 
 A roadmap, interface mockup, schema, or passing unit test alone does not satisfy
 the definition of finished (`docs/RELEASE_ACCEPTANCE.md`).

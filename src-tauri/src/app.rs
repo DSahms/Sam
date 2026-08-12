@@ -260,6 +260,29 @@ pub fn vault_unlock_recovery(
     Ok(summary)
 }
 
+/// Recover a vault and replace its forgotten passphrase in one operation.
+#[tauri::command]
+pub fn vault_recover_change_passphrase(
+    state: tauri::State<AppState>,
+    vault_id: String,
+    recovery_code: String,
+    new_passphrase: String,
+) -> AppResult<VaultSummary> {
+    let id = VaultId::parse(&vault_id)?;
+    let code = RecoveryCode::parse(&recovery_code).map_err(|_| AppError::Crypto)?;
+    let vault = state.with_registry(|reg| {
+        reg.recover_and_change_passphrase(id, &code, new_passphrase.as_bytes())
+    })??;
+    let summary = VaultSummary {
+        vault_id: vault.vault_id.to_string(),
+        name: vault.name.clone(),
+        template: vault.template,
+        created_at: String::new(),
+    };
+    state.set_active(vault)?;
+    Ok(summary)
+}
+
 /// Lock the active vault.
 #[tauri::command]
 pub fn vault_lock(state: tauri::State<AppState>) -> AppResult<()> {

@@ -83,6 +83,7 @@ pub fn run() {
             app::vault_list,
             app::vault_unlock,
             app::vault_unlock_recovery,
+            app::vault_recover_change_passphrase,
             app::vault_lock,
             app::vault_status,
             app::touch_activity,

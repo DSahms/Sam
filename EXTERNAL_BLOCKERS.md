@@ -27,23 +27,20 @@ work continues. None of these block the build or the test suite.
 
 ### Venice cloud API key
 - **Blocker:** No Venice API key configured.
-- **Fallback:** The Venice adapter interface is implemented; integration tests
-  use the deterministic mock provider. Cloud-provider chat is exercised
-  end-to-end when a key is supplied.
+- **Fallback:** The production HTTPS transport, encrypted credential storage,
+  endpoint restriction, consent routing, connection test, and deterministic
+  integration coverage are complete. Only live-account validation awaits a key.
 
 ### KoboldCpp local endpoint
-- **Blocker:** No KoboldCpp-compatible service running.
-- **Fallback:** The KoboldCpp adapter interface is implemented; tests use the
-  mock provider. Local chat is exercised end-to-end when an endpoint is
-  configured.
+- **Status:** Available during the release pass. Model discovery and a normal
+  chat response were verified live at localhost:5001.
 
 ## OCR
 
-### Local OCR engine binding
-- **Blocker:** The chosen local OCR adapter dependency has not been finalized.
-- **Fallback:** Per directive §23, the OCR adapter interface and deterministic
-  fixtures/mocks are implemented; scanned-page OCR is exercised against those
-  until the real binding is selected.
+### Local OCR runtime
+- **Blocker:** Tesseract is not installed on the validation machine.
+- **Fallback:** The production adapter invokes local Tesseract without plaintext
+  temporary files and returns a clear error when absent.
 
 ## Dependency license report
 
@@ -57,7 +54,11 @@ work continues. None of these block the build or the test suite.
 
 ## npm audit advisories
 
-- **Status:** `npm install` reports advisories in dev-only transitive
-  dependencies. These do not ship in the production Tauri bundle (only the
-  built frontend assets are bundled). They will be addressed by dependency
-  updates before the release gate.
+- **Status:** Resolved. `npm audit` reports zero vulnerabilities.
+
+## Independent clean-machine validation
+
+- **Blocker:** Only the current Windows 11 machine was available. NSIS install,
+  launch, exit, and relaunch pass here; MSI creation passes, while MSI install
+  requires administrator elevation. Repeat on a separate clean VM before public
+  distribution.

@@ -10,13 +10,13 @@ Sammy can change AI providers without losing its identity, knowledge, memory, co
 
 ## Status
 
-This repository is under active development against a phased roadmap (see
-`ROADMAP.md`). **Phase 0 (Foundation)** is complete and verified. Phase 1
-(Cryptographic Vault Spine) is in progress. See `STATE.md` for exactly what
-works today and `PROJECT_STATE.json` for machine-readable status.
+The first Windows release candidate is implemented and packaged. The automated
+quality gate passes, a real local KoboldCpp chat has been verified, and unsigned
+MSI and NSIS installers are produced by the Tauri release build. See `STATE.md`
+for evidence and `EXTERNAL_BLOCKERS.md` for remaining external prerequisites.
 
-Sammy is **not** finished, secure, or production-ready. Do not rely on it to
-protect real secrets yet. See `THREAT_MODEL.md` for the honest threat boundary.
+Sammy has a documented security boundary, not a promise of absolute security.
+Read `THREAT_MODEL.md` before placing important private material in a vault.
 
 ## What Sammy is not
 
@@ -68,6 +68,9 @@ certificate is available — see `EXTERNAL_BLOCKERS.md`):
 ```bash
 npm run tauri:build    # produces MSI / NSIS installers
 ```
+
+See `docs/USER_GUIDE.md` for installation, vault setup, providers, imports,
+backup, and recovery.
 
 ## Repository layout
 

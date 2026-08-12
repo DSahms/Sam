@@ -321,6 +321,19 @@ impl VaultKeyMaterial {
         unwrap_key(&kek, &blob)
     }
 
+    /// Replace only the passphrase wrapping of an already-unwrapped DEK.
+    /// The independent recovery wrapping remains unchanged.
+    pub fn with_new_passphrase(
+        &self,
+        dek: &SecretKey,
+        new_passphrase: &[u8],
+    ) -> Result<Self, CryptoError> {
+        let pass_kek = derive_kek(new_passphrase, &self.salt, &self.params)?;
+        let mut updated = self.clone();
+        updated.wrapped_dek = b64().encode(wrap_key(&pass_kek, dek));
+        Ok(updated)
+    }
+
     /// Serialize to bytes (JSON) for storage outside the database.
     pub fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).expect("VaultKeyMaterial serializable")

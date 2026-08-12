@@ -192,6 +192,32 @@ impl VaultRegistry {
         self.open(vault_id, &manifest, dek)
     }
 
+    /// Verify a recovery code and atomically replace the forgotten master
+    /// passphrase without changing the vault DEK or recovery wrapping.
+    pub fn recover_and_change_passphrase(
+        &self,
+        vault_id: VaultId,
+        recovery: &RecoveryCode,
+        new_passphrase: &[u8],
+    ) -> AppResult<Vault> {
+        if new_passphrase.len() < MIN_PASSPHRASE_LEN {
+            return Err(AppError::InvalidArgument(format!(
+                "passphrase must be at least {MIN_PASSPHRASE_LEN} bytes"
+            )));
+        }
+        let mut manifest = self.read_manifest(vault_id)?;
+        let dek = manifest
+            .key_material
+            .unlock_with_recovery(recovery)
+            .map_err(|_| AppError::Crypto)?;
+        manifest.key_material = manifest
+            .key_material
+            .with_new_passphrase(&dek, new_passphrase)
+            .map_err(|_| AppError::Crypto)?;
+        write_manifest_atomic(&self.manifest_path(vault_id), &manifest)?;
+        self.open(vault_id, &manifest, dek)
+    }
+
     fn open(
         &self,
         vault_id: VaultId,
@@ -365,8 +391,6 @@ impl Vault {
         &self.dek
     }
 
-    /// Best-effort: re-key the database's encryption key. Phase 1 does not yet
-    /// expose this; placeholder for the "change passphrase" feature.
     pub fn vault_id(&self) -> VaultId {
         self.vault_id
     }
@@ -515,6 +539,31 @@ mod tests {
             .unlock_with_recovery(manifest.vault_id, &recovery)
             .unwrap();
         assert_eq!(vault.vault_id, manifest.vault_id);
+    }
+
+    #[test]
+    fn recovery_replaces_forgotten_passphrase_without_changing_recovery() {
+        let (_tmp, reg) = fresh_registry();
+        let (manifest, _, recovery) = reg
+            .create("P", VaultTemplate::Personal, b"old passphrase")
+            .unwrap();
+
+        reg.recover_and_change_passphrase(
+            manifest.vault_id,
+            &recovery,
+            b"new passphrase",
+        )
+        .unwrap();
+
+        assert!(reg
+            .unlock_with_passphrase(manifest.vault_id, b"old passphrase")
+            .is_err());
+        assert!(reg
+            .unlock_with_passphrase(manifest.vault_id, b"new passphrase")
+            .is_ok());
+        assert!(reg
+            .unlock_with_recovery(manifest.vault_id, &recovery)
+            .is_ok());
     }
 
     #[test]

@@ -60,6 +60,16 @@ export const api = {
     invoke<VaultSummary>("vault_unlock", { vaultId, passphrase }),
   vaultUnlockRecovery: (vaultId: string, recoveryCode: string) =>
     invoke<VaultSummary>("vault_unlock_recovery", { vaultId, recoveryCode }),
+  vaultRecoverChangePassphrase: (
+    vaultId: string,
+    recoveryCode: string,
+    newPassphrase: string,
+  ) =>
+    invoke<VaultSummary>("vault_recover_change_passphrase", {
+      vaultId,
+      recoveryCode,
+      newPassphrase,
+    }),
   vaultLock: () => invoke<void>("vault_lock"),
   vaultStatus: () => invoke<VaultStatus>("vault_status"),
   touchActivity: () => invoke<void>("touch_activity"),

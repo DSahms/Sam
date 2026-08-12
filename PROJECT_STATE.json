@@ -1,7 +1,7 @@
 {
   "project": "Sammy",
-  "current_phase": "Phases 0-8 implemented; Phase 9 (validation) in progress",
-  "status": "phase_9_testing_underway",
+  "current_phase": "First Windows release candidate",
+  "status": "release_candidate_external_validation_pending",
   "completed_capabilities": [
     "workspace_cargo_build",
     "frontend_vite_build",
@@ -19,6 +19,7 @@
     "vault_create",
     "vault_unlock_passphrase",
     "vault_unlock_recovery",
+    "vault_recovery_change_passphrase",
     "vault_lock",
     "vault_multi_vault_isolation",
     "vault_sqlcipher_encrypted_at_rest",
@@ -48,58 +49,54 @@
     "knowledge_contradictions_corrections_supersession_tombstones",
     "frontend_what_i_know_view_functional",
     "sources_encrypted_storage_aes256gcm",
-    "sources_text_markdown_json_csv_extractors",
+    "sources_text_markdown_json_csv_pdf_docx_image_extractors",
     "sources_fts5_search_sanitized",
     "frontend_sources_view_functional",
     "citations_trust_classification_claim_labels",
     "retrieval_11_step_pipeline",
-    "retrieval_embedding_vector_interfaces",
+    "retrieval_persistent_sqlcipher_vector_index",
     "corpus_export_import_idempotent",
     "corpus_cli_validator",
     "memory_candidate_workflow",
     "memory_approve_promotes_to_knowledge",
     "permissions_grant_revoke_immediate",
-    "tools_registry_read_only_and_mock_only"
+    "tools_registry_read_only_and_mock_only",
+    "venice_https_transport_encrypted_credentials",
+    "backup_recovery_frontend",
+    "windows_msi_nsis_packages",
+    "installed_nsis_launch_relaunch_verified"
   ],
   "active_work": [
-    "phase_9_product_validation",
-    "forbidden_behavior_test_suite_37",
-    "e2e_workflow_tests_36",
-    "dependency_license_report",
-    "privacy_audit_ui_wired",
-    "memory_review_ui_wired"
+    "external_clean_machine_validation",
+    "external_windows_code_signing",
+    "external_live_venice_validation",
+    "external_tesseract_runtime_validation"
   ],
   "known_failures": [],
   "external_blockers": [
     "no_code_signing_certificate",
     "no_venice_api_key",
-    "no_koboldcpp_endpoint",
-    "pdf_docx_ocr_bindings_not_wired_interfaces_ready",
+    "no_tesseract_runtime_on_validation_machine",
+    "no_independent_clean_windows_machine",
     "build_requires_strawberry_perl_on_path"
   ],
-  "security_debt": [
-    "real_koboldcpp_venice_http_transports_use_mock_in_tests",
-    "embedding_vector_engine_is_in_memory_stub",
-    "phase_9_validation_not_run"
-  ],
+  "security_debt": [],
   "test_summary": {
-    "rust_unit": { "passed": 159, "failed": 0, "ignored": 0 },
-    "rust_integration": { "passed": 26, "failed": 0, "ignored": 0 },
-    "frontend": { "passed": 6, "failed": 0, "ignored": 0 },
+    "rust_unit": { "passed": 181, "failed": 0, "ignored": 0 },
+    "rust_integration": { "passed": 32, "failed": 0, "ignored": 0 },
+    "frontend": { "passed": 12, "failed": 0, "ignored": 0 },
     "fmt_check": "pass",
     "clippy": "clean (-D warnings)",
     "eslint": "pass",
     "prettier": "pass",
     "tsc_strict": "pass"
   },
-  "last_verified_commit": "90fc945",
+  "last_verified_commit": "final readiness commit containing this state file",
   "next_actions": [
-    "Phase 9: Windows packaging, clean-machine install test",
-    "Phase 9: dependency license report",
-    "Phase 9: performance tests at representative scale",
-    "Wire real PDF/DOCX/image extractors + OCR adapter",
-    "Wire real KoboldCpp/Venice HTTP transports",
-    "Persistent vector index"
+    "Sign installers when a certificate is supplied",
+    "Validate Venice with a live API key",
+    "Validate image OCR with local Tesseract",
+    "Repeat installer and UI smoke on an independent clean Windows 11 machine"
   ],
   "updated_at": "2026-08-09T00:00:00Z"
 }

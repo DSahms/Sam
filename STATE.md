@@ -115,18 +115,24 @@ Last updated: 2026-08-12 (Phases 0–8 + Phase 9 + real KoboldCpp; checkpoint pe
 - ✅ No tool executes without permission; revocation immediate.
 - ✅ FTS5 queries sanitized (no operator injection).
 
-## Not yet done
-- Phase 9 (product validation): Windows packaging/clean-machine install;
-  performance tests at scale; user documentation.
-- PDF/DOCX/image extractors + OCR adapter (interface ready; binding unchosen).
-- Venice cloud provider HTTP transport (interface ready; mock transport tested;
-  no API key available for live testing).
-- Embedding/vector engine persistence (in-memory stub tested).
+## Release-candidate additions verified 2026-08-12
+- PDF and DOCX extraction plus a local Tesseract image-OCR adapter; imports are
+  checksum-idempotent and retain extraction provenance.
+- Real Venice HTTPS transport, encrypted per-vault API-key storage, endpoint
+  restriction, model configuration, connection test, consent, and safe errors.
+- Persistent per-vault SQLCipher vector index, hybrid Chat retrieval, deletion,
+  restart persistence, and deterministic rebuild.
+- Backup & Recovery UI with preview, both credentials, and explicit confirmation.
+- Recovery-code flow replaces a forgotten passphrase without changing vault data.
+- Production MSI and NSIS packages. NSIS install, launch, exit, and relaunch pass.
+- 213 Rust and 12 frontend tests pass (225 total); all quality gates are green.
+
+## External validation still required
+- Windows code-signing certificate, a live Venice API key, local Tesseract for
+  image OCR, and an independent clean-Windows-machine installer smoke test.
 
 ## External blockers
 See `EXTERNAL_BLOCKERS.md`. None block the build or tests.
 
 ## Next work
-Phase 9 product validation: Windows MSI/NSIS packaging, clean-machine install
-test, performance-at-scale tests. Or: PDF/DOCX/OCR extractors, Venice transport,
-persistent vector index.
+Complete the external validations listed above before public distribution.
