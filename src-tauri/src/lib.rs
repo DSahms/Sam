@@ -4,13 +4,9 @@
 //! (§7). Each module owns one capability. Security-sensitive state lives only
 //! in Rust and is never handed to the frontend in plaintext form.
 //!
-//! Module status:
-//! - `crypto`    — Phase 1 cryptographic primitives (Argon2id, AES-GCM, KDF).
-//! - `vault`     — Phase 1 vault create / unlock / lock / multi-vault.
-//! - `audit`     — Phase 1 append-only audit-event foundation.
-//! - `identity`, `conversation`, `providers`, `knowledge`, `corpus`,
-//!   `sources`, `retrieval`, `citations`, `memory`, `permissions`, `tools`,
-//!   `backup`, `settings` — stubs, filled in by later phases.
+//! Domain modules are production implementations: cryptography and vault
+//! lifecycle, identity/conversations/providers, knowledge/corpus/sources,
+//! retrieval/citations/memory, permissions/tools/audit, backup, and settings.
 // `unsafe` is denied crate-wide; the only audited exception is the Windows
 // session-lock FFI in `lock::is_session_locked_windows`. Use `#[allow(unsafe_code)]`
 // only on that function, never elsewhere.

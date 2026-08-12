@@ -6,10 +6,9 @@
 //! or active content is ever executed. No plaintext temporary files are left
 //! behind after processing.
 //!
-//! This slice implements encrypted source storage + txt/markdown/json/csv
-//! extractors + FTS indexing of extracted text. PDF/DOCX/image/OCR adapters are
-//! replaceable behind the [`Extractor`] trait; PDF/DOCX/OCR are recorded as
-//! external blockers until their bindings are wired (§6/§23).
+//! This module implements encrypted source storage, txt/markdown/json/csv/PDF/
+//! DOCX/image extractors, and FTS indexing. Format adapters are replaceable
+//! behind the [`Extractor`] trait; image OCR uses the local Tesseract runtime.
 
 use std::io::{Cursor, Read, Write};
 use std::path::Path;

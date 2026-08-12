@@ -126,6 +126,9 @@ Last updated: 2026-08-12 (Phases 0–8 + Phase 9 + real KoboldCpp; checkpoint pe
 - Recovery-code flow replaces a forgotten passphrase without changing vault data.
 - Production MSI and NSIS packages. NSIS install, launch, exit, and relaunch pass.
 - 213 Rust and 12 frontend tests pass (225 total); all quality gates are green.
+- Professional GitHub documentation covers installation, every product view,
+  corpus concepts, architecture, security, operations, development, testing,
+  release, troubleshooting, and maintainer handoff with validated local links.
 
 ## External validation still required
 - Windows code-signing certificate, a live Venice API key, local Tesseract for
