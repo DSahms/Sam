@@ -599,3 +599,15 @@ select:focus {
   font-size: 14px !important;
   color: var(--fg) !important;
 }
+
+/* ---- Backup & Recovery view ---- */
+.backup-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 700px;
+}
+
+.restore-flow {
+  margin-top: 8px;
+}
