@@ -41,6 +41,10 @@ or any future provider. Derived search indexes can be rebuilt from that corpus.
 
 ## Quick start
 
+Sammy supports Windows 11 x64. The easiest route is a prebuilt NSIS installer and
+a locally running KoboldCpp service with a model loaded; no developer toolchain is
+needed for that route.
+
 1. Install the current-user **NSIS** package or administrator-assisted **MSI**.
 2. Open **Vaults**, create a vault, and save the one-time recovery code.
 3. Start a KoboldCpp OpenAI-compatible API, normally at `http://localhost:5001`.
@@ -135,6 +139,9 @@ operators, security reviewers, and maintainers. Frequently used pages:
 
 Prerequisites are Windows 11 x64, the Rust MSVC toolchain, Node.js 22, Visual
 Studio C++ build tools, and Strawberry Perl for vendored OpenSSL.
+
+Run these PowerShell commands from the repository root—the folder containing
+`package.json` and `Cargo.toml`:
 
 ```powershell
 npm install

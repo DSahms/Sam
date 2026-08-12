@@ -2,6 +2,9 @@
 
 [Build](build.md) · [Release checklist](release-process.md#release-checklist)
 
+Run every command in PowerShell from the repository root. Tests use temporary
+vaults and deterministic providers unless a section explicitly says otherwise.
+
 ## Fast feedback
 
 ```powershell
@@ -24,6 +27,11 @@ npm audit --audit-level=low
 npm run build
 npm run tauri:build
 ```
+
+The gate succeeds only when every command exits successfully, Rust and Vitest
+report zero failures, npm reports zero known vulnerabilities at the selected
+level, and both installers are produced. Do not infer success from the absence of
+a visible error while a command is still running.
 
 Rust unit tests sit beside modules. `e2e_workflows.rs` crosses subsystem
 boundaries; `forbidden_behaviors.rs` proves privacy/security negatives;

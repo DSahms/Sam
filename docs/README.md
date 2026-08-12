@@ -16,6 +16,9 @@ This documentation describes the implemented `0.1.0` release candidate.
 | Build or change Sammy | [Development setup](development/setup.md) |
 | Prepare a release | [Release process](development/release-process.md) |
 
+New to localhost, SQLCipher, OCR, or vector indexes? The
+[glossary](reference/glossary.md) explains them without requiring architecture knowledge.
+
 ## Getting started
 
 - [Installation](getting-started/installation.md)

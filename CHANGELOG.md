@@ -10,6 +10,9 @@ release exists yet; entries describe verified repository milestones only.
 - Rebuilt the GitHub landing page and professional documentation hierarchy.
 - Added user, concepts, architecture, security, operations, reference,
   troubleshooting, testing, release, and maintainer guidance.
+- Applied the global beginner-to-maintainer documentation standard with explicit
+  prerequisite verification, shell/working-directory guidance, success states,
+  terminology, uninstall behavior, and diagnosis-first troubleshooting.
 
 ## [0.1.0-rc] - 2026-08-12
 
