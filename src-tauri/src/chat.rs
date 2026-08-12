@@ -58,6 +58,43 @@ impl ProviderRoster {
         }
     }
 
+    /// Build a roster from the vault's provider configuration. When KoboldCpp
+    /// is configured and enabled, it is placed first in the local list so the
+    /// routing resolver prefers it. The deterministic mock is always appended
+    /// as a fallback so chat degrades gracefully if the real endpoint is down.
+    ///
+    /// Returns the roster plus a model-name resolution: if the caller passed an
+    /// empty model, the configured default model is used.
+    pub fn from_config(config: &crate::settings::ProviderConfig) -> Self {
+        let mut local: Vec<Arc<dyn Provider>> = Vec::new();
+        if config.koboldcpp_enabled && !config.koboldcpp_endpoint.is_empty() {
+            local.push(Arc::new(crate::providers::KoboldCppProvider::new(
+                config.koboldcpp_endpoint.clone(),
+                config.koboldcpp_model.clone(),
+                Box::new(crate::providers::HttpKoboldTransport::new()),
+            )));
+        }
+        // Always keep the mock as a fallback so chat degrades gracefully.
+        local.push(Arc::new(crate::providers::MockProvider::echo()));
+        Self {
+            local,
+            cloud: vec![],
+        }
+    }
+
+    /// Resolve a model name: use the requested model if non-empty, otherwise
+    /// fall back to the configured default.
+    pub fn resolve_model(
+        config: &crate::settings::ProviderConfig,
+        requested: &str,
+    ) -> String {
+        if requested.is_empty() {
+            config.koboldcpp_model.clone()
+        } else {
+            requested.to_string()
+        }
+    }
+
     /// Get a provider by combined index (local first, then cloud).
     pub fn get(&self, index: usize) -> Option<&Arc<dyn Provider>> {
         if index < self.local.len() {
@@ -423,5 +460,96 @@ mod tests {
             .find(|s| s.id == "identity")
             .unwrap();
         assert!(identity_section.title.contains("TestSammy"));
+    }
+
+    #[test]
+    fn from_config_without_koboldcpp_is_mock_only() {
+        let config = crate::settings::ProviderConfig::default();
+        let roster = ProviderRoster::from_config(&config);
+        assert_eq!(roster.local.len(), 1);
+        assert_eq!(roster.local[0].info().id, "mock");
+    }
+
+    #[test]
+    fn from_config_with_disabled_koboldcpp_is_mock_only() {
+        let config = crate::settings::ProviderConfig {
+            koboldcpp_endpoint: "http://localhost:5001".into(),
+            koboldcpp_model: "test".into(),
+            koboldcpp_enabled: false,
+        };
+        let roster = ProviderRoster::from_config(&config);
+        assert_eq!(roster.local.len(), 1);
+        assert_eq!(roster.local[0].info().id, "mock");
+    }
+
+    #[test]
+    fn from_config_with_enabled_koboldcpp_puts_it_first() {
+        let config = crate::settings::ProviderConfig {
+            koboldcpp_endpoint: "http://localhost:5001".into(),
+            koboldcpp_model: "koboldcpp/test-model".into(),
+            koboldcpp_enabled: true,
+        };
+        let roster = ProviderRoster::from_config(&config);
+        assert_eq!(roster.local.len(), 2);
+        assert_eq!(roster.local[0].info().id, "koboldcpp");
+        assert_eq!(roster.local[1].info().id, "mock");
+    }
+
+    #[test]
+    fn from_config_with_empty_endpoint_is_mock_only() {
+        // Enabled but no endpoint → don't add KoboldCpp.
+        let config = crate::settings::ProviderConfig {
+            koboldcpp_endpoint: "".into(),
+            koboldcpp_model: "test".into(),
+            koboldcpp_enabled: true,
+        };
+        let roster = ProviderRoster::from_config(&config);
+        assert_eq!(roster.local.len(), 1);
+        assert_eq!(roster.local[0].info().id, "mock");
+    }
+
+    #[test]
+    fn resolve_model_uses_configured_default_when_empty() {
+        let config = crate::settings::ProviderConfig {
+            koboldcpp_model: "configured-model".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            ProviderRoster::resolve_model(&config, ""),
+            "configured-model"
+        );
+        // Non-empty requested model takes precedence.
+        assert_eq!(
+            ProviderRoster::resolve_model(&config, "user-model"),
+            "user-model"
+        );
+    }
+
+    #[test]
+    fn run_turn_with_configured_roster_falls_back_to_mock_when_koboldcpp_unreachable() {
+        // KoboldCpp at index 0 (unreachable), mock at index 1 (reachable).
+        // With prefer_local or ask_before_crossing, the resolver should skip
+        // the unreachable KoboldCpp and use the reachable mock.
+        let conn = fresh_conn();
+        let conv = conversation::create(&conn, None).unwrap();
+        let config = crate::settings::ProviderConfig {
+            koboldcpp_endpoint: "http://127.0.0.1:1".into(), // nothing listening
+            koboldcpp_model: "test".into(),
+            koboldcpp_enabled: true,
+        };
+        let roster = ProviderRoster::from_config(&config);
+        // local_reachable: [false (koboldcpp unreachable), true (mock)]
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "hello".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 16,
+            model: "test".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[false, true], &[], &turn, &always_allow())
+                .unwrap();
+        // Should have fallen back to the mock.
+        assert_eq!(result.response.provider, "mock");
     }
 }

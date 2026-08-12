@@ -462,8 +462,11 @@ pub struct CloudConsentView {
 
 /// Send a chat turn. If a cloud crossing is required, returns `consent_required`
 /// instead of a response; the frontend then re-calls with `confirmed = true`.
-/// Uses the deterministic mock provider for now (real provider wiring is a
-/// follow-up slice that adds provider configuration to settings).
+/// Send a chat turn through the normal Chat UI path. The provider roster is
+/// built from the vault's provider configuration: when KoboldCpp is configured
+/// and enabled, it is preferred; the deterministic mock is always a fallback.
+/// If routing requires a cloud crossing, returns `consent_required` instead of
+/// a response; the frontend then re-calls with `confirmed = true`.
 #[tauri::command]
 pub fn chat_send(
     state: tauri::State<AppState>,
@@ -476,21 +479,41 @@ pub fn chat_send(
     let cid = crate::ids::ConversationId::parse(&conversation_id)?;
     state.with_active(|v| {
         let conn = v.lock_conn();
-        let roster = crate::chat::ProviderRoster::mock_only();
-        // The mock is local, so for local_only/prefer_local/ask_before_crossing
-        // it is used directly. Cloud-only/prefer-cloud require consent since the
-        // mock is classified local — we simulate the consent path by checking
-        // routing here without a cloud provider present.
+        // Load provider configuration and build the roster.
+        let config = crate::settings::load(&conn)?;
+        let roster = crate::chat::ProviderRoster::from_config(&config);
+        let resolved_model = crate::chat::ProviderRoster::resolve_model(&config, &model);
+
+        // Compute reachability for each local provider. The mock (last entry)
+        // is always reachable. Real providers (e.g. KoboldCpp at index 0) are
+        // reachable if test_connection succeeds.
+        let mut local_reachable = Vec::with_capacity(roster.local.len());
+        for p in &roster.local {
+            let reachable = if p.info().id == "mock" {
+                true
+            } else {
+                p.test_connection().is_ok()
+            };
+            local_reachable.push(reachable);
+        }
+
         let turn = crate::chat::ChatTurn {
             conversation_id: cid,
             user_text: text,
             routing,
             max_tokens: 512,
-            model,
+            model: resolved_model,
         };
         let allow = confirmed;
         let consent: crate::chat::ConsentFn = Box::new(move |_| allow);
-        match crate::chat::run_turn(&conn, &roster, &[true], &[], &turn, &consent) {
+        match crate::chat::run_turn(
+            &conn,
+            &roster,
+            &local_reachable,
+            &[],
+            &turn,
+            &consent,
+        ) {
             Ok(r) => Ok(ChatSendResult {
                 content: Some(r.response.content.clone()),
                 provider: Some(r.response.provider.clone()),
