@@ -3,7 +3,7 @@
 This file describes **only what currently works**, with evidence. It is updated
 every checkpoint. If something is not here, it does not work yet.
 
-Last updated: 2026-08-11 (Phases 0–8 + Phase 9 testing; checkpoint 90fc945)
+Last updated: 2026-08-12 (Phases 0–8 + Phase 9 + real KoboldCpp; checkpoint pending)
 
 ## Works now
 
@@ -117,14 +117,16 @@ Last updated: 2026-08-11 (Phases 0–8 + Phase 9 testing; checkpoint 90fc945)
 
 ## Not yet done
 - Phase 9 (product validation): Windows packaging/clean-machine install;
-  performance tests at scale; dependency license report; user documentation.
+  performance tests at scale; user documentation.
 - PDF/DOCX/image extractors + OCR adapter (interface ready; binding unchosen).
-- Real KoboldCpp/Venice HTTP transports (interface ready; mock transports tested).
+- Venice cloud provider HTTP transport (interface ready; mock transport tested;
+  no API key available for live testing).
 - Embedding/vector engine persistence (in-memory stub tested).
 
 ## External blockers
 See `EXTERNAL_BLOCKERS.md`. None block the build or tests.
 
 ## Next work
-Phase 9 product validation, or hardening the remaining adapters (PDF/DOCX/OCR,
-real HTTP transports, persistent vector index).
+Phase 9 product validation: Windows MSI/NSIS packaging, clean-machine install
+test, performance-at-scale tests. Or: PDF/DOCX/OCR extractors, Venice transport,
+persistent vector index.

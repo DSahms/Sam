@@ -16,6 +16,8 @@ export function ChatView() {
   const [input, setInput] = useState("");
   const [routing, setRouting] = useState<RoutingMode>("ask_before_crossing");
   const [model, setModel] = useState("mock-1");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [providerLabel, setProviderLabel] = useState("mock");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState<{
@@ -57,6 +59,40 @@ export function ChatView() {
   useEffect(() => {
     refreshMessages();
   }, [refreshMessages]);
+
+  // Load provider config: set the model to the configured default, and if
+  // KoboldCpp is enabled, fetch available models for the dropdown.
+  useEffect(() => {
+    (async () => {
+      try {
+        const config = await api.providerConfigGet();
+        if (config.koboldcpp_enabled && config.koboldcpp_endpoint) {
+          setProviderLabel("KoboldCpp (local)");
+          if (config.koboldcpp_model) {
+            setModel(config.koboldcpp_model);
+          }
+          // Fetch available models for the dropdown.
+          try {
+            const models = await api.koboldcppTestConnection(config.koboldcpp_endpoint);
+            setAvailableModels(models);
+            // If no model was configured, use the first available.
+            if (!config.koboldcpp_model && models.length > 0) {
+              setModel(models[0]);
+            }
+          } catch {
+            // Endpoint unreachable — leave model as-is; chat_send will
+            // fall back to the mock provider.
+            setAvailableModels([]);
+          }
+        } else {
+          setProviderLabel("mock (no local provider configured)");
+          setModel("mock-1");
+        }
+      } catch {
+        // Config not loadable (e.g. vault locked) — default to mock.
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
@@ -155,8 +191,21 @@ export function ChatView() {
           </label>
           <label className="muted small">
             Model:
-            <input value={model} onChange={(e) => setModel(e.target.value)} />
+            {availableModels.length > 0 ? (
+              <select value={model} onChange={(e) => setModel(e.target.value)}>
+                {availableModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input value={model} onChange={(e) => setModel(e.target.value)} />
+            )}
           </label>
+          <span className="badge" title="Active provider">
+            {providerLabel}
+          </span>
           {crossedToCloud && (
             <span
               className="badge badge-warn"
