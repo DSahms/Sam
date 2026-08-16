@@ -145,6 +145,7 @@ pub struct ChatTurnResult {
     pub response: ChatResponse,
     pub consent_requested: Option<CloudConsentRequest>,
     pub prompt_summary: Vec<crate::identity::PromptSectionSummary>,
+    pub pkc: crate::external_pkc::PkcTurnView,
 }
 
 /// Run one chat turn. `conn` is the unlocked vault's SQLCipher connection.
@@ -176,20 +177,25 @@ pub fn run_turn(
             content: m.content.clone(),
         })
         .collect();
-    let any_local = local_reachable.iter().copied().any(|reachable| reachable);
-    let any_cloud = cloud_reachable.iter().copied().any(|reachable| reachable);
-    let cloud_bound = match turn.routing {
-        RoutingMode::LocalOnly => false,
-        RoutingMode::PreferLocal | RoutingMode::AskBeforeCrossing => {
-            !any_local && any_cloud
-        }
-        RoutingMode::PreferCloud => any_cloud,
-        RoutingMode::CloudOnly => true,
-    };
-    let sensitivity = if cloud_bound {
-        crate::retrieval::SensitivityFilter::ExcludeLocalOnly
-    } else {
+
+    // Resolve routing before any PKC retrieval so a later cloud decision cannot
+    // inherit private evidence, and so cloud turns never query PKC at all.
+    let decision = crate::providers::resolve_routing(
+        turn.routing,
+        roster.local.len(),
+        roster.cloud.len(),
+        &roster.local_reachable(local_reachable),
+        &roster.cloud_reachable(cloud_reachable),
+    );
+    let local_committed = matches!(
+        decision,
+        RoutingDecision::Use { provider_index } if provider_index < roster.local.len()
+    );
+
+    let sensitivity = if local_committed {
         crate::retrieval::SensitivityFilter::All
+    } else {
+        crate::retrieval::SensitivityFilter::ExcludeLocalOnly
     };
     let vector_index = crate::retrieval::SqliteVectorIndex::new(conn)?;
     let embedding = crate::retrieval::StubEmbeddingProvider;
@@ -207,30 +213,27 @@ pub fn run_turn(
         .iter()
         .map(|hit| format!("[record:{}] {}", hit.record_id, hit.snippet))
         .collect();
-    // External PKC is read-only and never sent on a cloud-bound turn.
-    if !cloud_bound {
-        if let Ok(cfg) = crate::settings::load(conn) {
-            if let Some(payload) =
-                crate::external_pkc::authorized_payload_for_turn(&cfg, &turn.user_text)
-            {
-                retrieved.push(format!(
-                    "[external-pkc / source-backed fact]\n{payload}\nTreat the block above as retrieved evidence. Do not invent additional memories from it."
-                ));
-            }
+
+    let pkc_outcome = if local_committed {
+        match crate::settings::load(conn) {
+            Ok(cfg) => crate::external_pkc::consult_for_local_turn(&cfg, &turn.user_text),
+            Err(_) => crate::external_pkc::consult_for_local_turn(
+                &crate::settings::ProviderConfig::default(),
+                &turn.user_text,
+            ),
         }
+    } else {
+        crate::external_pkc::skipped_cloud_bound()
+    };
+    let _ = crate::external_pkc::audit_outcome(conn, &pkc_outcome);
+    if let Some(evidence) = pkc_outcome.evidence.as_ref() {
+        retrieved.push(crate::external_pkc::package_model_safe_context(
+            &evidence.model_safe_text,
+        ));
     }
     let prompt = PromptAssembly::new(&identity, turn.routing.as_str(), &[], &retrieved);
     let system = prompt.render_system();
     let prompt_summary = prompt.inspection_view();
-
-    // 3. Resolve routing.
-    let decision = crate::providers::resolve_routing(
-        turn.routing,
-        roster.local.len(),
-        roster.cloud.len(),
-        &roster.local_reachable(local_reachable),
-        &roster.cloud_reachable(cloud_reachable),
-    );
 
     let req = ChatRequest {
         system,
@@ -300,12 +303,17 @@ pub fn run_turn(
     let response = provider.chat(&req)?;
 
     // 5. Record the assistant message.
-    conversation::append_message(
+    let assistant_id = conversation::append_message(
         conn,
         turn.conversation_id,
         Role::Assistant,
         &response.content,
     )?;
+    let _ = crate::external_pkc::store_provenance(
+        conn,
+        &assistant_id.to_string(),
+        &pkc_outcome.owner_view,
+    );
 
     // 6. Audit: every cloud transmission is recorded; local calls are audited
     //    more lightly.
@@ -344,6 +352,7 @@ pub fn run_turn(
         response,
         consent_requested,
         prompt_summary,
+        pkc: pkc_outcome.owner_view,
     })
 }
 
@@ -723,6 +732,291 @@ print(json.dumps({{
         assert_eq!(knowledge_count(&conn), 0);
         assert!(!result.response.crossed_to_cloud);
         assert_eq!(result.response.provider, "mock");
+        assert!(result.pkc.used);
+        assert_eq!(result.pkc.classification.as_deref(), Some("stored_fact"));
+        let audit_blob: String = conn
+            .prepare("SELECT group_concat(detail_json, '\n') FROM audit_events")
+            .unwrap()
+            .query_row([], |r| r.get::<_, Option<String>>(0))
+            .unwrap()
+            .unwrap_or_default();
+        assert!(!audit_blob.contains("Gloucester"));
+        assert!(!audit_blob.contains("Dave grew up"));
+        crate::memory::ensure_schema(&conn).unwrap();
+        let mem: i64 = conn
+            .query_row("SELECT count(*) FROM memory_candidates", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mem, 0);
+    }
+
+    #[test]
+    fn repeated_pkc_retrieval_still_writes_no_durable_memory() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("Dave grew up in Gloucester Township.");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        for _ in 0..2 {
+            let turn = ChatTurn {
+                conversation_id: conv,
+                user_text: "Where did I grow up?".into(),
+                routing: RoutingMode::LocalOnly,
+                max_tokens: 32,
+                model: "mock-1".into(),
+            };
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        }
+        assert!(ran.exists());
+        assert_eq!(knowledge_count(&conn), 0);
+        crate::memory::ensure_schema(&conn).unwrap();
+        let mem: i64 = conn
+            .query_row("SELECT count(*) FROM memory_candidates", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mem, 0);
+    }
+
+    #[test]
+    fn owner_approved_memory_follows_normal_review_path_with_provenance() {
+        let conn = fresh_conn();
+        crate::memory::ensure_schema(&conn).unwrap();
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let msgs = conversation::messages(&conn, conv).unwrap();
+        let candidate = crate::memory::propose(
+            &conn,
+            "Grew up in Gloucester Township",
+            "preference",
+            Some(conv),
+            None,
+            "owner review of a PKC-grounded chat turn",
+            0.8,
+            "normal",
+            "personal",
+            "mock",
+            false,
+        )
+        .unwrap();
+        assert_eq!(knowledge_count(&conn), 0);
+        let _ = msgs;
+        let _ = candidate;
+        let mem: i64 = conn
+            .query_row("SELECT count(*) FROM memory_candidates", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mem, 1);
+        assert_eq!(knowledge_count(&conn), 0);
+    }
+
+    #[test]
+    fn greeting_does_not_query_pkc() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("MUST_NOT_APPEAR");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "hello".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(!ran.exists(), "greetings must not query PKC");
+        assert!(!result.pkc.used);
+        assert_eq!(result.pkc.skip_reason.as_deref(), Some("not_useful"));
+        let _ = script;
+    }
+
+    #[test]
+    fn prefer_cloud_does_not_query_pkc_even_when_local_is_up() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("MUST_NOT_CROSS_TO_CLOUD");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster {
+            local: vec![Arc::new(MockProvider::echo())],
+            cloud: vec![Arc::new(MockProvider::fixed("cloud-answer"))],
+        };
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::PreferCloud,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[true], &turn, &always_allow()).unwrap();
+        assert!(!ran.exists(), "cloud route must not query PKC");
+        assert!(!result.pkc.used);
+        assert_eq!(result.pkc.state, "cloud_turn_skipped");
+        let empty = "(no approved knowledge retrieved for this turn)".len() as u32;
+        assert_eq!(knowledge_chars(&result), empty);
+        assert!(!result.response.content.contains("MUST_NOT_CROSS_TO_CLOUD"));
+    }
+
+    #[test]
+    fn local_to_cloud_fallback_does_not_carry_pkc_evidence() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("MUST_NOT_CROSS_TO_CLOUD");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        // No local provider; PreferLocal therefore requires cloud consent.
+        let roster = ProviderRoster {
+            local: vec![],
+            cloud: vec![Arc::new(MockProvider::fixed("cloud-answer"))],
+        };
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::PreferLocal,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[], &[true], &turn, &always_allow()).unwrap();
+        assert!(!ran.exists(), "fallback cloud turn must not invoke PKC");
+        assert!(!result.pkc.used);
+        let empty = "(no approved knowledge retrieved for this turn)".len() as u32;
+        assert_eq!(knowledge_chars(&result), empty);
+        assert!(!result.response.content.contains("MUST_NOT_CROSS_TO_CLOUD"));
+    }
+
+    #[test]
+    fn sparse_pkc_evidence_is_packaged_without_scene_license() {
+        let conn = fresh_conn();
+        let (script, _) = fake_pkc_bridge("The family moved often.");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "What do you know about my childhood?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 32,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(result.pkc.used);
+        assert!(knowledge_chars(&result) > 40);
+        assert!(crate::grounding::presents_unsupported_concrete_scene(
+            "The way the light shifted as you moved through that narrow doorway sounds like a very specific moment.",
+            "The family moved often.",
+            "What do you know about my childhood?",
+        ));
+        assert!(audit::assert_action_recorded(
+            &conn,
+            "pkc_retrieval_succeeded"
+        ));
+        assert!(audit::assert_action_recorded(
+            &conn,
+            "pkc_evidence_sanitized"
+        ));
+    }
+
+    #[test]
+    fn malformed_pkc_response_degrades_without_crashing() {
+        let conn = fresh_conn();
+        let dir = std::env::temp_dir().join(format!(
+            "sammy-pkc-bad-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("fake_bridge.py");
+        std::fs::write(&script, "print('not-json')\n").unwrap();
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(!result.pkc.used);
+        assert!(result.pkc.owner_notice.is_some());
+        let empty = "(no approved knowledge retrieved for this turn)".len() as u32;
+        assert_eq!(knowledge_chars(&result), empty);
+    }
+
+    #[test]
+    fn unauthorized_pkc_evidence_never_reaches_the_model() {
+        let conn = fresh_conn();
+        let dir = std::env::temp_dir().join(format!(
+            "sammy-pkc-unauth-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("fake_bridge.py");
+        std::fs::write(
+            &script,
+            r#"import json
+print(json.dumps({
+  "bridge_version": "1.0.0",
+  "ok": True,
+  "available": True,
+  "payload": {
+    "natural_answer": "MUST_NOT_REACH_MODEL",
+    "conversational_context": "",
+    "authorized": False,
+    "canonical_hash_verified": False,
+    "protected_content_materialized": False
+  }
+}))
+"#,
+        )
+        .unwrap();
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(!result.pkc.used);
+        assert_eq!(result.pkc.state, "available_unauthorized");
+        assert!(!result.response.content.contains("MUST_NOT_REACH_MODEL"));
+        assert!(audit::assert_action_recorded(
+            &conn,
+            "pkc_authorization_denied"
+        ));
+    }
+
+    #[test]
+    fn disable_mid_session_stops_retrieval() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("Dave grew up in Gloucester Township.");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(ran.exists());
+        std::fs::remove_file(&ran).ok();
+        crate::settings::save(&conn, &crate::settings::ProviderConfig::default())
+            .unwrap();
+        run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(!ran.exists(), "disabled gate must stop further retrieval");
     }
 
     #[test]

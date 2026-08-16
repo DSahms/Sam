@@ -426,6 +426,8 @@ pub struct MessageSummary {
     pub role: String,
     pub content: String,
     pub seq: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pkc: Option<crate::external_pkc::PkcTurnView>,
 }
 
 /// List conversations in the active vault.
@@ -470,6 +472,7 @@ pub fn conversation_messages(
                 role: m.role.clone(),
                 content: m.content.clone(),
                 seq: m.seq,
+                pkc: crate::external_pkc::load_provenance(&conn, &m.message_id),
             })
             .collect())
     })?
@@ -487,6 +490,8 @@ pub struct ChatSendResult {
     pub consent_required: Option<CloudConsentView>,
     /// Sanitized prompt-section summaries (lengths, not bodies).
     pub prompt_summary: Vec<crate::identity::PromptSectionSummary>,
+    /// Body-free PKC turn view (used/state/hashes only).
+    pub pkc: crate::external_pkc::PkcTurnView,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -571,6 +576,7 @@ pub fn chat_send(
                     routing_mode: c.routing_mode,
                 }),
                 prompt_summary: r.prompt_summary,
+                pkc: r.pkc,
             }),
             Err(AppError::Config(msg)) if msg.contains("denied by owner") => {
                 Err(AppError::Config(msg))
@@ -1157,9 +1163,116 @@ pub fn provider_config_save(
     state: tauri::State<AppState>,
     config: crate::settings::ProviderConfig,
 ) -> AppResult<()> {
+    crate::external_pkc::validate_or_error(&config)?;
     state.with_active(|v| {
         let conn = v.lock_conn();
-        crate::settings::save(&conn, &config)
+        let previous = crate::settings::load(&conn)?;
+        let mut to_save = config;
+        if pkc_identity_changed(&previous, &to_save) {
+            to_save.pkc_last_health_state.clear();
+            to_save.pkc_last_health_at.clear();
+        }
+        crate::settings::save(&conn, &to_save)?;
+        if previous.pkc_enabled != to_save.pkc_enabled {
+            let action = if to_save.pkc_enabled {
+                "pkc_enabled"
+            } else {
+                "pkc_disabled"
+            };
+            crate::audit::record(
+                &conn,
+                crate::audit::AuditCategory::Knowledge,
+                action,
+                None,
+                &serde_json::json!({
+                    "consumer": crate::external_pkc::CONSUMER_APPLICATION,
+                    "purpose": crate::external_pkc::PURPOSE,
+                }),
+            )?;
+        } else if pkc_identity_changed(&previous, &to_save) {
+            crate::audit::record(
+                &conn,
+                crate::audit::AuditCategory::Knowledge,
+                "pkc_config_changed",
+                None,
+                &serde_json::json!({
+                    "enabled": to_save.pkc_enabled,
+                    "source_configured": !to_save.pkc_source_id.trim().is_empty(),
+                }),
+            )?;
+        }
+        Ok(())
+    })?
+}
+
+fn pkc_identity_changed(
+    previous: &crate::settings::ProviderConfig,
+    next: &crate::settings::ProviderConfig,
+) -> bool {
+    previous.pkc_python_executable.trim() != next.pkc_python_executable.trim()
+        || previous.pkc_bridge_script.trim() != next.pkc_bridge_script.trim()
+        || previous.pkc_root.trim() != next.pkc_root.trim()
+        || previous.pkc_source_id.trim() != next.pkc_source_id.trim()
+}
+
+/// Discover local PKC defaults (paths that actually exist on this machine).
+#[tauri::command]
+pub fn pkc_discover_defaults() -> crate::external_pkc::PkcDiscovery {
+    crate::external_pkc::discover_defaults()
+}
+
+/// PKC health. `probe` actually talks to the gateway and discards corpus text.
+#[tauri::command]
+pub fn pkc_health_check(
+    state: tauri::State<AppState>,
+    config: crate::settings::ProviderConfig,
+    probe: bool,
+) -> AppResult<crate::external_pkc::PkcHealthReport> {
+    let report = crate::external_pkc::health_check(&config, probe);
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        if probe {
+            let mut saved = crate::settings::load(&conn)?;
+            saved.pkc_last_health_state = report.state.as_str().to_string();
+            saved.pkc_last_health_at = chrono::Utc::now().to_rfc3339();
+            crate::settings::save(&conn, &saved)?;
+            crate::audit::record(
+                &conn,
+                crate::audit::AuditCategory::Knowledge,
+                "pkc_health_check",
+                None,
+                &serde_json::json!({
+                    "state": report.state.as_str(),
+                    "probed": report.probed,
+                    "authorized": report.authorized,
+                    "python_ok": report.python_ok,
+                    "bridge_ok": report.bridge_ok,
+                    "root_ok": report.root_ok,
+                    "payload_chars": report.payload_chars,
+                    "payload_sha256": report.payload_sha256,
+                }),
+            )?;
+        }
+        Ok(report)
+    })?
+}
+
+/// Owner opened provenance detail. Records an audit event without corpus text.
+#[tauri::command]
+pub fn pkc_provenance_opened(
+    state: tauri::State<AppState>,
+    message_id: String,
+) -> AppResult<()> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::audit::record(
+            &conn,
+            crate::audit::AuditCategory::Knowledge,
+            "pkc_provenance_opened",
+            None,
+            &serde_json::json!({ "message_id": message_id }),
+        )?;
+        Ok(())
     })?
 }
 
