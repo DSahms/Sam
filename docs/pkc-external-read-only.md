@@ -22,12 +22,19 @@ This slice:
 2. Read-only: no automatic durable memory writes, no corpus mutation.
 3. Uses the same Python gateway shape as the PKC Reference Client
    (`tools/storykeeper_pkc_bridge.py` in that repo).
-4. Sends `consumer_application: sammy`. PKC currently authorizes the
-   StoryKeeper consumer; unauthorized evidence is dropped, not spoofed.
+4. Sends `consumer_application: sammy`. PKC authorizes that consumer for
+   purpose `personal_consigliere` only. StoryKeeper remains a separate consumer.
+   Unauthorized evidence is dropped, not spoofed.
 5. Skips PKC when the turn is cloud-bound (no personal evidence to cloud).
 6. Local model remains KoboldCpp; mock fallback if the local model is down.
 7. Prompt grounding section forbids unsupported sensory/factual embellishment.
 8. PKC bookkeeping must not appear in model or user-facing text.
 
 Configure in Settings: enable the gate, set Python, bridge script, PKC root,
-and canonical source ID. Do not copy the Flutter interview application into Sammy.
+and canonical source ID. Production default remains off.
+
+Local exercise without flipping the product default:
+
+```powershell
+python tools/exercise_pkc_readonly_path.py
+```

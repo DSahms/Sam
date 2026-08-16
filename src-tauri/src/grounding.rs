@@ -23,6 +23,14 @@ with a concrete invented scene.";
 const UNSUPPORTED_SCENE_MARKERS: &[&str] = &[
     "narrow doorway",
     "light shifted",
+    "dim amber glow",
+    "hallway turned left into the parlor",
+    "it was raining that afternoon",
+    "you were standing by the stove",
+    "tightness around your father's jaw",
+    "the screen door slammed",
+    "the smell of oil heat",
+    "first you unpacked, then you sat on the stairs",
 ];
 
 const BOOKKEEPING_MARKERS: &[&str] = &[
@@ -87,6 +95,41 @@ mod tests {
             EVIDENCE,
             USER,
         ));
+    }
+
+    #[test]
+    fn invented_details_are_flagged_by_category() {
+        let invented = [
+            ("lighting", "The dim amber glow in that kitchen is still with you."),
+            ("room", "The hallway turned left into the parlor before you spoke."),
+            ("weather", "It was raining that afternoon when you arrived."),
+            ("position", "You were standing by the stove as you said that."),
+            ("face", "I can still see the tightness around your father's jaw."),
+            ("sound", "The screen door slammed behind you."),
+            ("smell", "The smell of oil heat filled the house."),
+            ("sequence", "First you unpacked, then you sat on the stairs."),
+        ];
+        for (category, model) in invented {
+            assert!(
+                presents_unsupported_concrete_scene(model, EVIDENCE, USER),
+                "{category}"
+            );
+        }
+    }
+
+    #[test]
+    fn open_questions_are_not_invented_facts() {
+        for question in [
+            "What was the weather like?",
+            "Where were you standing?",
+            "Do you remember any smells?",
+            "What happened first?",
+        ] {
+            assert!(
+                !presents_unsupported_concrete_scene(question, EVIDENCE, USER),
+                "{question}"
+            );
+        }
     }
 
     #[test]

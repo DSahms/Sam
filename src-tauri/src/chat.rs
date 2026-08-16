@@ -637,4 +637,138 @@ mod tests {
         // Should have fallen back to the mock.
         assert_eq!(result.response.provider, "mock");
     }
+
+    fn fake_pkc_bridge(answer: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "sammy-pkc-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("fake_bridge.py");
+        let escaped = answer.replace('\\', "\\\\").replace('"', "\\\"");
+        std::fs::write(
+            &script,
+            format!(
+                r#"import json, pathlib, sys
+pathlib.Path(sys.argv[0]).with_suffix(".ran").write_text("ran", encoding="utf-8")
+print(json.dumps({{
+  "bridge_version": "1.0.0",
+  "ok": True,
+  "available": True,
+  "payload": {{
+    "natural_answer": "{escaped}",
+    "conversational_context": "",
+    "authorized": True,
+    "canonical_hash_verified": True,
+    "protected_content_materialized": True
+  }}
+}}))
+"#
+            ),
+        )
+        .unwrap();
+        (script, dir.join("fake_bridge.ran"))
+    }
+
+    fn enable_pkc(conn: &rusqlite::Connection, script: &std::path::Path) {
+        let cfg = crate::settings::ProviderConfig {
+            pkc_enabled: true,
+            pkc_python_executable: "python".into(),
+            pkc_bridge_script: script.to_string_lossy().into_owned(),
+            pkc_source_id: "SRC-SHA256-test".into(),
+            ..Default::default()
+        };
+        crate::settings::save(conn, &cfg).unwrap();
+    }
+
+    fn knowledge_count(conn: &rusqlite::Connection) -> i64 {
+        conn.query_row("SELECT count(*) FROM knowledge_records_full", [], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    }
+
+    fn knowledge_chars(result: &ChatTurnResult) -> u32 {
+        result
+            .prompt_summary
+            .iter()
+            .find(|s| s.id == "knowledge")
+            .unwrap()
+            .body_chars
+    }
+
+    #[test]
+    fn enabled_pkc_retrieval_does_not_write_durable_memory() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("Dave grew up in Gloucester Township.");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 64,
+            model: "mock-1".into(),
+        };
+        let empty = "(no approved knowledge retrieved for this turn)".len() as u32;
+        let result =
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(ran.exists(), "local turn should query the PKC bridge");
+        assert!(knowledge_chars(&result) > empty);
+        assert_eq!(knowledge_count(&conn), 0);
+        assert!(!result.response.crossed_to_cloud);
+        assert_eq!(result.response.provider, "mock");
+    }
+
+    #[test]
+    fn disabled_pkc_gate_restores_normal_behavior() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("MUST_NOT_APPEAR");
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(!ran.exists(), "disabled gate must not spawn the bridge");
+        let _ = script;
+        let empty = "(no approved knowledge retrieved for this turn)".len() as u32;
+        assert_eq!(knowledge_chars(&result), empty);
+        assert_eq!(knowledge_count(&conn), 0);
+    }
+
+    #[test]
+    fn cloud_bound_turns_do_not_receive_pkc_evidence() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("MUST_NOT_CROSS_TO_CLOUD");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster {
+            local: vec![],
+            cloud: vec![Arc::new(MockProvider::fixed("cloud-answer"))],
+        };
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::CloudOnly,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[], &[true], &turn, &always_allow()).unwrap();
+        assert!(!ran.exists(), "cloud-bound turns must not query PKC");
+        let empty = "(no approved knowledge retrieved for this turn)".len() as u32;
+        assert_eq!(knowledge_chars(&result), empty);
+        assert_eq!(knowledge_count(&conn), 0);
+    }
 }

@@ -3,7 +3,14 @@
 This file describes **only what currently works**, with evidence. It is updated
 every checkpoint. If something is not here, it does not work yet.
 
-Last updated: 2026-08-12 (Phases 0–8 + Phase 9 + real KoboldCpp; checkpoint pending)
+Last updated: 2026-08-16
+
+**External PKC** is not Sammy's vault corpus. Canonical PKC:
+`F:\personal-knowledge-corpus-scaffold\personal-knowledge-corpus`.
+Sammy may query it read-only as consumer `sammy` / purpose `personal_consigliere`
+when the Settings feature gate is on (default **off**). Retrieved evidence does
+not become durable Sammy memory. Cloud-bound turns do not receive PKC evidence.
+Local test: `python tools/exercise_pkc_readonly_path.py`
 
 ## Works now
 

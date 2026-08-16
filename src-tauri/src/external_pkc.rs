@@ -218,4 +218,34 @@ mod tests {
         assert!(!cfg.pkc_enabled);
         assert_eq!(authorized_payload_for_turn(&cfg, "Where did I grow up?"), None);
     }
+
+    #[test]
+    fn live_sammy_bridge_retrieves_authorized_seven_when_present() {
+        let script = Path::new(r"D:\dev\StoryKeeper\tools\storykeeper_pkc_bridge.py");
+        let root =
+            Path::new(r"F:\personal-knowledge-corpus-scaffold\personal-knowledge-corpus");
+        if !script.is_file() || !root.is_dir() {
+            return;
+        }
+        let cfg = ProviderConfig {
+            pkc_enabled: true,
+            pkc_python_executable: "python".into(),
+            pkc_bridge_script: script.to_string_lossy().into(),
+            pkc_root: root.to_string_lossy().into(),
+            pkc_source_id:
+                "SRC-SHA256-9c53f4f121815dfd736e0377fafade3e649b2571f8858eebc8f1a92db2b0ec7f"
+                    .into(),
+            ..ProviderConfig::default()
+        };
+        let payload = authorized_payload_for_turn(
+            &cfg,
+            "What do you remember about moving as a child?",
+        );
+        let text = payload.expect("authorized Sammy retrieval should return a payload");
+        assert!(!crate::grounding::leaks_pkc_bookkeeping(&text));
+        assert!(text.len() > 20);
+        assert!(!text.contains("CSDP-"));
+        assert!(!text.contains("authorization_denied"));
+        assert!(!text.contains("evidence_bookkeeping"));
+    }
 }
