@@ -203,10 +203,22 @@ pub fn run_turn(
         Some(&embedding),
         Some(&vector_index),
     )?;
-    let retrieved: Vec<String> = hits
+    let mut retrieved: Vec<String> = hits
         .iter()
         .map(|hit| format!("[record:{}] {}", hit.record_id, hit.snippet))
         .collect();
+    // External PKC is read-only and never sent on a cloud-bound turn.
+    if !cloud_bound {
+        if let Ok(cfg) = crate::settings::load(conn) {
+            if let Some(payload) =
+                crate::external_pkc::authorized_payload_for_turn(&cfg, &turn.user_text)
+            {
+                retrieved.push(format!(
+                    "[external-pkc / source-backed fact]\n{payload}\nTreat the block above as retrieved evidence. Do not invent additional memories from it."
+                ));
+            }
+        }
+    }
     let prompt = PromptAssembly::new(&identity, turn.routing.as_str(), &[], &retrieved);
     let system = prompt.render_system();
     let prompt_summary = prompt.inspection_view();

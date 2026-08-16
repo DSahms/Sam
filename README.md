@@ -2,18 +2,21 @@
 
 **A local-first, encryption-first personal AI consigliere for Windows.**
 
-Sammy keeps the durable parts of an AI relationship—identity, knowledge,
-sources, reviewed memory, conversations, permissions, and audit history—inside
-owner-controlled encrypted vaults. The language model is a replaceable provider,
-not the authoritative memory store.
+Sammy keeps the durable parts of an AI relationship — identity, knowledge,
+sources, reviewed memory, conversations, permissions, and audit history —
+inside owner-controlled encrypted vaults. The language model is a replaceable
+provider, not the authoritative memory store.
 
 > **Keep the soul. Change the brain.**
 
-[Get started](docs/getting-started/quick-start.md) ·
-[User guide](docs/README.md#user-guide) ·
-[Architecture](docs/architecture/overview.md) ·
-[Security](docs/security/security-model.md) ·
-[Build from source](docs/development/setup.md)
+| Start here | Go deeper |
+| --- | --- |
+| [Quick start](docs/getting-started/quick-start.md) | [Architecture](docs/architecture/overview.md) |
+| [**The Sammy Learner's Manual**](docs/README.md) | [Security model](docs/security/security-model.md) |
+| [Interactive walkthrough](walkthrough-overview.html) | [Build from source](docs/development/setup.md) |
+| [Glossary](docs/reference/glossary.md) | [FAQ](docs/FAQ.md) |
+
+---
 
 ## Why Sammy exists
 
@@ -21,9 +24,14 @@ Traditional AI relationships are commonly tied to one model, vendor, chat
 history, or cloud account. Changing providers can mean losing the context that
 made the assistant useful.
 
-Sammy separates the **replaceable brain** from a persistent **Personal Knowledge
-Corpus**. Canonical facts and sources remain independent of KoboldCpp, Venice,
-or any future provider. Derived search indexes can be rebuilt from that corpus.
+Sammy separates the **replaceable brain** from persistent owner-controlled
+knowledge. Sammy's encrypted **vault corpus** is internal to Sammy. The
+**Personal Knowledge Corpus (PKC)** is a separate product; this client may
+query it read-only when the feature gate is on. Canonical knowledge remains
+independent of KoboldCpp, Venice, or any future provider. Derived search
+indexes can be rebuilt from the vault corpus.
+
+---
 
 ## What ships today
 
@@ -31,7 +39,8 @@ or any future provider. Derived search indexes can be rebuilt from that corpus.
 | --- | --- |
 | Encrypted vaults | Independent SQLCipher databases with Argon2id-derived key wrapping, recovery codes, inactivity locking, and atomic manifests |
 | Local AI | KoboldCpp-compatible model discovery and chat over a configurable localhost endpoint |
-| Optional cloud AI | Venice transport with encrypted per-vault API keys, explicit routing, consent, and audited cloud crossing |
+| Optional external PKC | Feature-gated read-only retrieval through the same authorized gateway as the PKC Reference Client. Default off. See [external PKC slice](docs/pkc-external-read-only.md) |
+| Optional cloud AI | Venice transport with encrypted per-vault **API keys** ([what that means](docs/reference/glossary.md#api-and-api-key)), explicit routing, consent, and audited cloud crossing |
 | Knowledge corpus | Typed records, provenance, contradictions, corrections, supersession, tombstones, and full-text search |
 | Documents | TXT, Markdown, JSON, CSV, PDF, DOCX, PNG, JPEG, and WebP ingestion; images use local Tesseract OCR |
 | Retrieval | Hybrid lexical/vector retrieval with a rebuildable vector index stored inside the encrypted vault |
@@ -39,30 +48,33 @@ or any future provider. Derived search indexes can be rebuilt from that corpus.
 | Backup and recovery | Encrypted backup packages, preview, integrity validation, passphrase/recovery-code restore, and explicit replacement confirmation |
 | Audit and permissions | Append-only audit events and a deliberately restricted first-release tool capability set |
 
+---
+
 ## Quick start
 
-Sammy supports Windows 11 x64. The easiest route is a prebuilt NSIS installer and
-a locally running KoboldCpp service with a model loaded; no developer toolchain is
-needed for that route.
+Sammy supports **Windows 11 x64**. The easiest route is a prebuilt NSIS installer
+and a locally running KoboldCpp service with a model loaded — no developer
+toolchain required.
 
 1. Install the current-user **NSIS** package or administrator-assisted **MSI**.
 2. Open **Vaults**, create a vault, and save the one-time recovery code.
 3. Start a KoboldCpp OpenAI-compatible API, normally at `http://localhost:5001`.
-4. In **Settings**, enter the endpoint, test it, select the discovered model,
-   and save.
-5. Open **Chat**, create a conversation, verify the provider/model badge, and
-   send a message.
+4. In **Settings**, enter the endpoint, test it, select the discovered model, and save.
+5. Open **Chat**, create a conversation, verify the provider/model badge, and send a message.
 
-See the [complete quick start](docs/getting-started/quick-start.md) and
-[KoboldCpp setup guide](docs/getting-started/koboldcpp.md).
+Full walkthrough: [quick start](docs/getting-started/quick-start.md) ·
+[KoboldCpp setup](docs/getting-started/koboldcpp.md)
+
+---
 
 ## Installation
 
 Release builds produce two unsigned Windows 11 x64 installers:
 
-- `target/release/bundle/nsis/Sammy_0.1.0_x64-setup.exe` — per-user installer.
-- `target/release/bundle/msi/Sammy_0.1.0_x64_en-US.msi` — requires an
-  administrator session to install.
+| Package | Path | Notes |
+| --- | --- | --- |
+| NSIS (per-user) | `target/release/bundle/nsis/Sammy_0.1.0_x64-setup.exe` | Usual path for a single Windows account |
+| MSI | `target/release/bundle/msi/Sammy_0.1.0_x64_en-US.msi` | Needs an administrator session |
 
 Unsigned development packages may trigger a Windows reputation warning. Verify
 the artifact source; do not disable Windows security controls globally. Public
@@ -71,6 +83,8 @@ distribution still requires a code-signing certificate.
 [Installation details](docs/getting-started/installation.md) ·
 [Release process](docs/development/release-process.md)
 
+---
+
 ## Local AI with KoboldCpp
 
 Sammy calls the OpenAI-compatible `/v1/models` and `/v1/chat/completions`
@@ -78,13 +92,15 @@ endpoints. **Test connection** discovers models; saving Settings makes the chose
 model available to normal Chat. A local response is marked `crossed_to_cloud:
 false` and recorded as a local provider event.
 
-If the configured local endpoint cannot answer, Sammy does not silently send the
-request to Venice. Routing and any cloud crossing remain governed by the selected
-mode and owner confirmation. The deterministic mock provider remains available
-as a non-cloud development fallback.
+If the configured local endpoint cannot answer, Sammy does **not** silently send
+the request to Venice. Routing and any cloud crossing remain governed by the
+selected mode and owner confirmation. The deterministic mock provider remains
+available as a non-cloud development fallback.
 
 [Configure KoboldCpp](docs/getting-started/koboldcpp.md) ·
 [Provider behavior](docs/user-guide/providers.md)
+
+---
 
 ## Privacy and security
 
@@ -101,6 +117,8 @@ as a non-cloud development fallback.
 Sammy does not claim to protect an already-unlocked vault from a fully
 compromised operating system. Read the [security model](docs/security/security-model.md)
 and [threat model](docs/security/threat-model.md) before storing important data.
+
+---
 
 ## Architecture snapshot
 
@@ -122,26 +140,41 @@ flowchart TD
 [Data flow](docs/architecture/data-flow.md) ·
 [Repository map](docs/development/repository-layout.md)
 
-## Documentation
+---
 
-The [documentation home](docs/README.md) provides guided paths for users,
-operators, security reviewers, and maintainers. Frequently used pages:
+## The Sammy Learner's Manual
 
-- [First run](docs/getting-started/first-run.md)
-- [Personal Knowledge Corpus](docs/concepts/personal-knowledge-corpus.md)
-- [Document ingestion](docs/user-guide/document-ingestion.md)
-- [Backup and recovery](docs/user-guide/backup-recovery.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Testing](docs/development/testing.md)
-- [Maintainer guide](docs/development/MAINTAINER-GUIDE.md)
+Documentation here is a **Learner's Manual** — not a peer-to-peer cheat sheet.
+It assumes curiosity, not expertise: get a working result quickly, learn what
+each step means, and leave more capable than when you started.
+
+Open the full index: **[The Sammy Learner's Manual](docs/README.md)**
+
+| Path | For |
+| --- | --- |
+| [Getting started](docs/getting-started/quick-start.md) | First install and first chat |
+| [Interactive walkthrough](walkthrough-overview.html) | Clickable map of soul, brain, and knowledge |
+| [Learner guide](docs/README.md#learner-guide) | Each screen, explained |
+| [Concepts](docs/README.md#concepts) | Why the product is shaped this way |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Causes, then fixes |
+| [Glossary](docs/reference/glossary.md) | Plain-language definitions + safety notes |
+| [Developer guide](docs/development/setup.md) | Build, test, and maintain |
+| [Reference](docs/README.md#operations-and-reference) | Configuration and storage detail |
+
+Also useful: [First run](docs/getting-started/first-run.md) ·
+[Document ingestion](docs/user-guide/document-ingestion.md) ·
+[Backup and recovery](docs/user-guide/backup-recovery.md) ·
+[Testing](docs/development/testing.md) ·
+[Maintainer guide](docs/development/MAINTAINER-GUIDE.md)
+
+---
 
 ## Development
 
-Prerequisites are Windows 11 x64, the Rust MSVC toolchain, Node.js 22, Visual
-Studio C++ build tools, and Strawberry Perl for vendored OpenSSL.
+**Prerequisites:** Windows 11 x64, Rust MSVC toolchain, Node.js 22, Visual Studio
+C++ build tools, and Strawberry Perl for vendored OpenSSL.
 
-Run these PowerShell commands from the repository root—the folder containing
-`package.json` and `Cargo.toml`:
+From the repository root (the folder with `package.json` and `Cargo.toml`):
 
 ```powershell
 npm install
@@ -152,8 +185,12 @@ npm run tauri:build
 ```
 
 The full release gate also includes formatting, Clippy with warnings denied,
-TypeScript, ESLint, Prettier, npm audit, Vite, and Tauri packaging. See
-[development setup](docs/development/setup.md) and [testing](docs/development/testing.md).
+TypeScript, ESLint, Prettier, npm audit, Vite, and Tauri packaging.
+
+[Development setup](docs/development/setup.md) ·
+[Testing](docs/development/testing.md)
+
+---
 
 ## Current status
 
@@ -161,10 +198,13 @@ Sammy `0.1.0` is a **Windows release candidate**. The automated gate passes and
 MSI/NSIS packages are generated. Local KoboldCpp chat and installed NSIS
 launch/relaunch were verified on the development Windows 11 machine.
 
-External release validations remain: code signing, live Venice-account testing,
-Tesseract installation for image OCR, and an independent clean-machine smoke
-test. See [STATE.md](STATE.md), [ROADMAP.md](ROADMAP.md), and
-[EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md).
+Still outstanding for external release: code signing, live Venice-account
+testing, Tesseract installation for image OCR, and an independent clean-machine
+smoke test.
+
+[STATE.md](STATE.md) · [ROADMAP.md](ROADMAP.md) · [EXTERNAL_BLOCKERS.md](EXTERNAL_BLOCKERS.md)
+
+---
 
 ## License and dependency notices
 

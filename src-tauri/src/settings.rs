@@ -41,6 +41,22 @@ pub struct ProviderConfig {
     /// Read-only UI hint. The credential itself never crosses the Tauri boundary.
     #[serde(default)]
     pub venice_has_api_key: bool,
+    /// Feature gate for read-only queries to the external PKC product.
+    /// Default off. This is not Sammy's internal vault corpus.
+    #[serde(default)]
+    pub pkc_enabled: bool,
+    /// Python executable used to run the PKC Reference Client bridge script.
+    #[serde(default)]
+    pub pkc_python_executable: String,
+    /// Absolute path to `storykeeper_pkc_bridge.py` (filename is historical).
+    #[serde(default)]
+    pub pkc_bridge_script: String,
+    /// Optional PKC repository root passed to the bridge.
+    #[serde(default)]
+    pub pkc_root: String,
+    /// Canonical source ID for protected retrieval. Empty disables the query.
+    #[serde(default)]
+    pub pkc_source_id: String,
 }
 
 impl Default for ProviderConfig {
@@ -53,6 +69,11 @@ impl Default for ProviderConfig {
             venice_model: String::new(),
             venice_enabled: false,
             venice_has_api_key: false,
+            pkc_enabled: false,
+            pkc_python_executable: String::new(),
+            pkc_bridge_script: String::new(),
+            pkc_root: String::new(),
+            pkc_source_id: String::new(),
         }
     }
 }
@@ -205,6 +226,15 @@ mod tests {
         let loaded = load(&conn).unwrap();
         assert_eq!(loaded.koboldcpp_endpoint, "");
         assert!(!loaded.koboldcpp_enabled);
+        assert!(!loaded.pkc_enabled);
+    }
+
+    #[test]
+    fn missing_pkc_fields_default_off() {
+        let s = r#"{"koboldcpp_endpoint":"","koboldcpp_model":"","koboldcpp_enabled":false,"venice_endpoint":"https://api.venice.ai/api/v1","venice_model":"","venice_enabled":false,"venice_has_api_key":false}"#;
+        let back: ProviderConfig = serde_json::from_str(s).unwrap();
+        assert!(!back.pkc_enabled);
+        assert!(back.pkc_bridge_script.is_empty());
     }
 
     #[test]

@@ -10,6 +10,11 @@ export function SettingsView() {
     venice_model: "",
     venice_enabled: false,
     venice_has_api_key: false,
+    pkc_enabled: false,
+    pkc_python_executable: "",
+    pkc_bridge_script: "",
+    pkc_root: "",
+    pkc_source_id: "",
   });
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -194,6 +199,66 @@ export function SettingsView() {
             Available models: {testResult.models.join(", ")}
           </div>
         )}
+      </section>
+
+      <section className="card">
+        <h2 className="card-title">External PKC (read-only)</h2>
+        <p className="muted small">
+          Optional queries to the Personal Knowledge Corpus product — not Sammy&apos;s
+          internal vault. Disabled by default. Unauthorized evidence never reaches the
+          model. PKC is skipped on cloud-bound turns.
+        </p>
+        <div className="form-grid">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={config.pkc_enabled}
+              onChange={(e) => setConfig({ ...config, pkc_enabled: e.target.checked })}
+            />
+            Enable read-only PKC retrieval
+          </label>
+          <label>
+            Python executable
+            <input
+              type="text"
+              value={config.pkc_python_executable}
+              onChange={(e) =>
+                setConfig({ ...config, pkc_python_executable: e.target.value })
+              }
+              placeholder="python"
+            />
+          </label>
+          <label className="span-2">
+            Bridge script (absolute path)
+            <input
+              type="text"
+              value={config.pkc_bridge_script}
+              onChange={(e) => setConfig({ ...config, pkc_bridge_script: e.target.value })}
+              placeholder="D:\dev\StoryKeeper\tools\storykeeper_pkc_bridge.py"
+            />
+          </label>
+          <label className="span-2">
+            PKC root (optional)
+            <input
+              type="text"
+              value={config.pkc_root}
+              onChange={(e) => setConfig({ ...config, pkc_root: e.target.value })}
+            />
+          </label>
+          <label className="span-2">
+            Canonical source ID
+            <input
+              type="text"
+              value={config.pkc_source_id}
+              onChange={(e) => setConfig({ ...config, pkc_source_id: e.target.value })}
+            />
+          </label>
+        </div>
+        <div className="row">
+          <button type="button" className="btn btn-primary" onClick={handleSave}>
+            {saved ? "Saved ✓" : "Save PKC settings"}
+          </button>
+        </div>
       </section>
 
       {testResult?.ok && (

@@ -365,4 +365,9 @@ export interface ProviderConfig {
   venice_model: string;
   venice_enabled: boolean;
   venice_has_api_key: boolean;
+  pkc_enabled: boolean;
+  pkc_python_executable: string;
+  pkc_bridge_script: string;
+  pkc_root: string;
+  pkc_source_id: string;
 }
