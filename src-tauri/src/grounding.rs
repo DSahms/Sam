@@ -18,7 +18,11 @@ Never present inference as something you already know about the owner's life.\n\
 Never mention PKC, retrieval, authorization, hashes, source IDs, policy IDs, \
 or other bookkeeping in user-facing text.\n\
 If evidence is missing, say you do not have that fact. Do not fill the gap \
-with a concrete invented scene.";
+with a concrete invented scene.\n\
+When PKC stored evidence supports a claim, you may speak it as stored knowledge.\n\
+When the owner previously described something, prefer \"You previously described…\" \
+rather than treating recollection as independently verified fact.\n\
+When you are reasoning, prefer \"That suggests…\" rather than \"What happened was…\".";
 
 const UNSUPPORTED_SCENE_MARKERS: &[&str] = &[
     "narrow doorway",
@@ -35,6 +39,7 @@ const UNSUPPORTED_SCENE_MARKERS: &[&str] = &[
 
 const BOOKKEEPING_MARKERS: &[&str] = &[
     "CSDP-",
+    "RULE-SAMMY-PRIVATE-CONSULIERE",
     "RULE-STORYKEEPER-PRIVATE-AUTOBIOGRAPHY",
     "evidence_bookkeeping",
     "record_trust_state",
@@ -45,7 +50,11 @@ const BOOKKEEPING_MARKERS: &[&str] = &[
 
 /// True when model text treats a concrete scene as remembered fact that is
 /// absent from both evidence and the owner's statement.
-pub fn presents_unsupported_concrete_scene(model: &str, evidence: &str, user: &str) -> bool {
+pub fn presents_unsupported_concrete_scene(
+    model: &str,
+    evidence: &str,
+    user: &str,
+) -> bool {
     let allowed = format!("{}\n{}", evidence.to_lowercase(), user.to_lowercase());
     let hay = model.to_lowercase();
     UNSUPPORTED_SCENE_MARKERS
@@ -54,7 +63,9 @@ pub fn presents_unsupported_concrete_scene(model: &str, evidence: &str, user: &s
 }
 
 pub fn leaks_pkc_bookkeeping(text: &str) -> bool {
-    BOOKKEEPING_MARKERS.iter().any(|marker| text.contains(marker))
+    BOOKKEEPING_MARKERS
+        .iter()
+        .any(|marker| text.contains(marker))
 }
 
 #[cfg(test)]
@@ -100,14 +111,29 @@ mod tests {
     #[test]
     fn invented_details_are_flagged_by_category() {
         let invented = [
-            ("lighting", "The dim amber glow in that kitchen is still with you."),
-            ("room", "The hallway turned left into the parlor before you spoke."),
+            (
+                "lighting",
+                "The dim amber glow in that kitchen is still with you.",
+            ),
+            (
+                "room",
+                "The hallway turned left into the parlor before you spoke.",
+            ),
             ("weather", "It was raining that afternoon when you arrived."),
-            ("position", "You were standing by the stove as you said that."),
-            ("face", "I can still see the tightness around your father's jaw."),
+            (
+                "position",
+                "You were standing by the stove as you said that.",
+            ),
+            (
+                "face",
+                "I can still see the tightness around your father's jaw.",
+            ),
             ("sound", "The screen door slammed behind you."),
             ("smell", "The smell of oil heat filled the house."),
-            ("sequence", "First you unpacked, then you sat on the stairs."),
+            (
+                "sequence",
+                "First you unpacked, then you sat on the stairs.",
+            ),
         ];
         for (category, model) in invented {
             assert!(
@@ -133,8 +159,21 @@ mod tests {
     }
 
     #[test]
+    fn sparse_evidence_does_not_license_invented_scene() {
+        const SPARSE: &str = "The family moved often.";
+        assert!(presents_unsupported_concrete_scene(DOORWAY, SPARSE, USER));
+        assert!(!presents_unsupported_concrete_scene(
+            "That suggests the moves mattered, though the stored record is brief.",
+            SPARSE,
+            USER,
+        ));
+    }
+
+    #[test]
     fn bookkeeping_is_detected() {
         assert!(leaks_pkc_bookkeeping("authorization_denied for CSDP-1"));
-        assert!(!leaks_pkc_bookkeeping("You grew up in Gloucester Township."));
+        assert!(!leaks_pkc_bookkeeping(
+            "You grew up in Gloucester Township."
+        ));
     }
 }

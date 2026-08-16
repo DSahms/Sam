@@ -126,6 +126,25 @@ pub const MIGRATIONS: &[Migration] = &[
                 content_rowid='rowid'
               );",
     },
+    // Version 6: body-free PKC provenance attached to assistant messages.
+    Migration {
+        version: 6,
+        description: "message PKC provenance (identifiers and hashes only)",
+        sql: "CREATE TABLE IF NOT EXISTS message_pkc_provenance (
+                message_id TEXT PRIMARY KEY,
+                used INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                source_id TEXT,
+                classification TEXT,
+                request_id TEXT,
+                payload_sha256 TEXT,
+                payload_chars INTEGER NOT NULL DEFAULT 0,
+                authorized INTEGER,
+                skip_reason TEXT,
+                owner_notice TEXT,
+                created_at TEXT NOT NULL
+              );",
+    },
 ];
 
 /// The highest migration version defined.
@@ -233,12 +252,12 @@ mod tests {
         let count: i64 = c
             .query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN \
-                 ('knowledge_records','conversations','messages','sources','schema_version')",
+                 ('knowledge_records','conversations','messages','sources','schema_version','message_pkc_provenance')",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 6);
     }
 
     #[test]

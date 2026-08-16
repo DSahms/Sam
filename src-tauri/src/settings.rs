@@ -57,6 +57,12 @@ pub struct ProviderConfig {
     /// Canonical source ID for protected retrieval. Empty disables the query.
     #[serde(default)]
     pub pkc_source_id: String,
+    /// Last verified PKC health state (no corpus text). Empty means not tested.
+    #[serde(default)]
+    pub pkc_last_health_state: String,
+    /// RFC3339 timestamp of the last PKC probe.
+    #[serde(default)]
+    pub pkc_last_health_at: String,
 }
 
 impl Default for ProviderConfig {
@@ -74,6 +80,8 @@ impl Default for ProviderConfig {
             pkc_bridge_script: String::new(),
             pkc_root: String::new(),
             pkc_source_id: String::new(),
+            pkc_last_health_state: String::new(),
+            pkc_last_health_at: String::new(),
         }
     }
 }
@@ -235,6 +243,30 @@ mod tests {
         let back: ProviderConfig = serde_json::from_str(s).unwrap();
         assert!(!back.pkc_enabled);
         assert!(back.pkc_bridge_script.is_empty());
+        assert!(back.pkc_last_health_state.is_empty());
+    }
+
+    #[test]
+    fn pkc_settings_round_trip_including_health_snapshot() {
+        let conn = Connection::open_in_memory().unwrap();
+        let c = ProviderConfig {
+            pkc_enabled: true,
+            pkc_python_executable: "python".into(),
+            pkc_bridge_script: r"D:\dev\StoryKeeper\tools\storykeeper_pkc_bridge.py"
+                .into(),
+            pkc_root: r"F:\personal-knowledge-corpus-scaffold\personal-knowledge-corpus"
+                .into(),
+            pkc_source_id: "SRC-SHA256-test".into(),
+            pkc_last_health_state: "available_authorized".into(),
+            pkc_last_health_at: "2026-08-16T00:00:00Z".into(),
+            ..ProviderConfig::default()
+        };
+        save(&conn, &c).unwrap();
+        let loaded = load(&conn).unwrap();
+        assert!(loaded.pkc_enabled);
+        assert_eq!(loaded.pkc_source_id, "SRC-SHA256-test");
+        assert_eq!(loaded.pkc_last_health_state, "available_authorized");
+        assert!(!loaded.pkc_last_health_at.is_empty());
     }
 
     #[test]
