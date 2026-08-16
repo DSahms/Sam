@@ -20,6 +20,8 @@ pub mod conversation;
 pub mod corpus;
 pub mod crypto;
 pub mod db;
+pub mod external_pkc;
+pub mod grounding;
 pub mod identity;
 pub mod knowledge;
 pub mod lock;

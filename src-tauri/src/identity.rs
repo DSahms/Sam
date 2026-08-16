@@ -143,12 +143,13 @@ impl PromptAssembly {
     /// 3. Companion identity
     /// 4. Approved owner preferences
     /// 5. Relevant retrieved knowledge (Phase 5)
+    /// 6. Grounding / fidelity (source vs testimony vs inference)
     ///
     /// Note: current conversation context is appended by the chat runtime.
     ///
-    /// 6. Provider-routing rules
-    /// 7. Tool permissions
-    /// 8. Citation requirements
+    /// 7. Provider-routing rules
+    /// 8. Tool permissions
+    /// 9. Citation requirements
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         identity: &CompanionIdentity,
@@ -156,7 +157,7 @@ impl PromptAssembly {
         tool_permissions: &[&str],
         retrieved_knowledge: &[String],
     ) -> Self {
-        let mut sections = Vec::with_capacity(8);
+        let mut sections = Vec::with_capacity(9);
 
         sections.push(PromptSection {
             id: "security".into(),
@@ -200,6 +201,12 @@ impl PromptAssembly {
             } else {
                 retrieved_knowledge.join("\n---\n")
             },
+        });
+
+        sections.push(PromptSection {
+            id: "grounding".into(),
+            title: "Grounding and fidelity".into(),
+            body: crate::grounding::GROUNDING_RULES.into(),
         });
 
         sections.push(PromptSection {
@@ -397,6 +404,7 @@ mod tests {
                 "identity",
                 "preferences",
                 "knowledge",
+                "grounding",
                 "routing",
                 "tools",
                 "citations",
@@ -412,6 +420,8 @@ mod tests {
         assert!(!rendered.contains("DEK"));
         assert!(!rendered.contains("passphrase"));
         assert!(!rendered.contains("vault key"));
+        assert!(rendered.contains("Do not introduce concrete sensory details"));
+        assert!(rendered.contains("SOURCE-BACKED FACTS"));
     }
 
     #[test]
