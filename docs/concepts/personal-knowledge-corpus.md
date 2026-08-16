@@ -2,10 +2,14 @@
 
 [Documentation home](../README.md) · [Provenance](provenance.md) · [Corpus architecture](../architecture/corpus-architecture.md)
 
-The Personal Knowledge Corpus is the durable, owner-controlled knowledge layer
-that gives Sammy continuity across models. It combines structured records,
-encrypted sources, provenance, reviewed memory, conversation history, and audit
-history inside a vault.
+The Personal Knowledge Corpus **inside Sammy** is the durable, owner-controlled
+knowledge layer in the encrypted vault. It is **not** the separate PKC product
+that can be attached read-only in Settings.
+
+[External PKC](../getting-started/external-pkc.md) is an independently
+authoritative corpus. Enabling it does not merge the two systems. The vault
+corpus still combines structured records, encrypted sources, provenance,
+reviewed memory, conversation history, and audit history.
 
 ```mermaid
 flowchart LR

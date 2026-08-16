@@ -1,4 +1,4 @@
-# Sammy — external PKC read-only vertical slice
+# Sammy — external PKC (daily use)
 
 Sammy's encrypted vault corpus is **not** the Personal Knowledge Corpus product.
 
@@ -7,34 +7,88 @@ Sammy's encrypted vault corpus is **not** the Personal Knowledge Corpus product.
         durable personal knowledge
           facts / sources / provenance
                     |
-           stable authorized boundary
+         authorized stable boundary
+          storykeeper | sammy | else deny
                     |
           +---------+---------+
           |                   |
           v                   v
  PKC Reference Client       Sammy
- reference/proving app      real personal AI
+ proving/reference app    personal AI
 ```
 
-This slice:
+## What enabling it does
 
-1. Feature-gated (`pkc_enabled`, default off).
-2. Read-only: no automatic durable memory writes, no corpus mutation.
-3. Uses the same Python gateway shape as the PKC Reference Client
-   (`tools/storykeeper_pkc_bridge.py` in that repo).
-4. Sends `consumer_application: sammy`. PKC authorizes that consumer for
-   purpose `personal_consigliere` only. StoryKeeper remains a separate consumer.
-   Unauthorized evidence is dropped, not spoofed.
-5. Skips PKC when the turn is cloud-bound (no personal evidence to cloud).
-6. Local model remains KoboldCpp; mock fallback if the local model is down.
-7. Prompt grounding section forbids unsupported sensory/factual embellishment.
-8. PKC bookkeeping must not appear in model or user-facing text.
+Allows **authorized, read-only** retrieval for eligible **local** chat turns.
+Sammy consults PKC as consumer `sammy` with purpose `personal_consigliere`.
 
-Configure in Settings: enable the gate, set Python, bridge script, PKC root,
-and canonical source ID. Production default remains off.
+## What enabling it does not do
 
-Local exercise without flipping the product default:
+- Does not upload PKC to a cloud model
+- Does not automatically copy PKC into Sammy memory
+- Does not give Sammy write or intake authority over PKC
+- Does not query PKC on every message (greetings, arithmetic, and generic
+  world facts are skipped)
 
-```powershell
-python tools/exercise_pkc_readonly_path.py
-```
+## Setup (in Sammy)
+
+1. Unlock a vault and open **Settings**.
+2. Open **Personal knowledge (PKC)**.
+3. Choose **Find local defaults** if the usual bridge and PKC folder exist on
+   this machine. Otherwise set the PKC location and source identity.
+4. **Save**, then **Test connection**. Green **Authorized** means Sammy actually
+   verified authorization. It does not dump corpus contents.
+5. Enable the feature only after a successful test, then Save again if needed.
+6. Chat normally on a local route (KoboldCpp or the local mock fallback).
+
+Production default remains **off**. Configuration lives in the vault; restart
+keeps the saved enable/disable state.
+
+Advanced Python / bridge paths are under **Advanced connection details**. You
+should not need to edit JSON files.
+
+## Daily chat
+
+On a local turn about you, your history, preferences, or documented facts,
+Sammy may consult PKC, strip bookkeeping, and ground the local model. A subtle
+**Used personal knowledge** control on the answer lets you inspect source
+identity and evidence size — not raw infrastructure or private corpus dumps.
+
+Cloud routing (including local→cloud fallback) does **not** retrieve PKC and
+cannot carry previously retrieved PKC evidence into a cloud request. Retrieval
+happens only after a local provider route is committed.
+
+## Fact, testimony, and inference
+
+- **Stored fact** — may be spoken as stored knowledge when the corpus supports it.
+- **Testimony** — the owner's own words: “You previously described…”
+- **Inference** — Sammy's reasoning: “That suggests…” — not source truth.
+
+Sammy must not invent concrete scene detail (doorway, lighting, weather, and
+similar) as if PKC supplied it.
+
+## Retrieval judgment
+
+Worth a lookup: questions about the owner, past events, decisions, preferences,
+project history, relationships among stored information, recall/compare requests.
+
+Not worth a lookup: greetings, thanks, pure arithmetic, generic world facts.
+
+## Failure behavior
+
+If Python, the bridge, or PKC is missing, unauthorized, slow, or malformed,
+chat continues without personal knowledge. Settings shows an understandable
+status. Diagnostics stay in logs/audit (identifiers, counts, hashes — not
+corpus text).
+
+## Diagnostic tool
+
+`python tools/exercise_pkc_readonly_path.py --mode health|auth|retrieval|sanitize|local`
+
+This is support infrastructure, not the user experience.
+
+## Privacy model
+
+PKC evidence is local-only. Cloud turns skip retrieval entirely. Retrieval
+alone never writes Sammy durable memory. Owner-approved memories still go
+through Memory Review, with provenance, like any other candidate.

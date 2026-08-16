@@ -11,3 +11,8 @@
 Sammy’s review boundary prevents fluent model output from silently becoming
 authoritative personal data. Approval is an explicit state transition; rejection
 keeps the candidate out of retrieval.
+
+External PKC retrieval is also not memory. Consulting PKC during chat writes
+nothing durable. If you later approve a related memory, it follows this same
+review path and should keep provenance.
+

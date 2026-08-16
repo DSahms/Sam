@@ -25,6 +25,7 @@ New to localhost, SQLCipher, OCR, or vector indexes? The
 - [First run](getting-started/first-run.md)
 - [Quick start](getting-started/quick-start.md)
 - [KoboldCpp](getting-started/koboldcpp.md)
+- [External personal knowledge (PKC)](getting-started/external-pkc.md)
 
 ## User guide
 

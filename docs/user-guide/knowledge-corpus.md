@@ -13,3 +13,7 @@ provenance remain available for audit.
 
 The SQLCipher records are canonical. FTS5 and vectors are derived indexes and can
 be rebuilt; deleting an index does not delete the knowledge it represents.
+
+This vault corpus is **not** the external Personal Knowledge Corpus product.
+Optional read-only PKC access is configured in Settings and does not copy PKC
+records into **What I Know**. See [external PKC](../getting-started/external-pkc.md).

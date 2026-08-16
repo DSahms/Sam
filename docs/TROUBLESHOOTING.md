@@ -42,6 +42,24 @@ Inspect the provider/model badge, saved enabled settings, and routing mode.
 `local_only` fails closed when no usable local provider exists. Cloud paths
 require the applicable consent; Mock is deterministic and non-cloud.
 
+## Personal knowledge (PKC) will not connect
+
+Unlock the vault, open **Settings → Personal knowledge (PKC)**, and use
+**Test connection**. The badge is only green after a real check.
+
+| What you see | Likely cause | What to do |
+| --- | --- | --- |
+| Off | Feature disabled (the default) | Enable only if you want local read-only lookups |
+| Not tested | Paths saved, not verified | Test connection |
+| Python missing | Python is not installed or the path is wrong | Install Python or set the executable under Advanced |
+| Bridge missing | The bridge file moved | Find local defaults, or set the absolute bridge path |
+| Unavailable | PKC folder missing or the process failed | Confirm the PKC location still exists |
+| Unauthorized | Sammy is not allowed for that source | Do not weaken permissions; use an authorized source |
+| Misconfigured | Source identity or paths incomplete | Save a source identity and valid folders, then retest |
+
+Chat continues without personal knowledge. Cloud chats never consult PKC.
+Turn the feature off in Settings to stop lookups immediately.
+
 ## Venice rejects the key
 
 Unlock the vault, replace the key in Settings, and test. Authentication and rate

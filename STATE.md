@@ -8,9 +8,19 @@ Last updated: 2026-08-16
 **External PKC** is not Sammy's vault corpus. Canonical PKC:
 `F:\personal-knowledge-corpus-scaffold\personal-knowledge-corpus`.
 Sammy may query it read-only as consumer `sammy` / purpose `personal_consigliere`
-when the Settings feature gate is on (default **off**). Retrieved evidence does
-not become durable Sammy memory. Cloud-bound turns do not receive PKC evidence.
-Local test: `python tools/exercise_pkc_readonly_path.py`
+when the owner enables it in Settings (default **off**). Daily use is the
+Settings card + normal Chat, not the diagnostic script.
+
+Verified daily-use slice:
+- Settings UI with discovery, validation, test-connection, and health states
+- Retrieval only after a **local** route is committed (cloud turns never query)
+- Lightweight retrieval judgment (personal/history vs greetings/math/generic)
+- Sanitized model context; body-free provenance in Chat
+- No automatic durable memory writes
+- Audit events without corpus text
+- Failures degrade; chat remains usable
+
+Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode health`
 
 ## Works now
 
@@ -25,7 +35,7 @@ Local test: `python tools/exercise_pkc_readonly_path.py`
   key wrap/unwrap, VaultKeyMaterial (passphrase + recovery unwrap), recovery codes.
 - `vault`: per-vault dir (vault.json + vault.db); create/unlock/lock/list/delete;
   multi-vault isolation; SQLCipher encrypted-at-rest (tested); atomic writes.
-- `db`: versioned, forward-only migrations with transactional rollback (v1–v5).
+- `db`: versioned, forward-only migrations with transactional rollback (v1–v6).
 - `audit`: append-only audit_events API (record/list/count_by_category).
 - `lock`: inactivity watchdog (5/15/30/60 min, manual); Windows session-lock
   detection (desktop-name polling via GetUserObjectInformationW); background thread.
@@ -42,10 +52,12 @@ Local test: `python tools/exercise_pkc_readonly_path.py`
 - `providers`: Provider trait; MockProvider (deterministic), KoboldCppProvider
   (local, transport-abstracted), VeniceProvider (cloud, key-gated);
   resolve_routing (5 modes, default ask_before_crossing).
-- `chat` runtime: orchestrates identity → prompt → routing → consent → provider →
-  audit; cloud-crossing consent flow; denial → no transmission (audited).
+- `chat` runtime: orchestrates identity → routing (committed first) → prompt →
+  consent → provider → audit; cloud-crossing consent flow; denial → no
+  transmission (audited). External PKC retrieval runs only on committed local
+  turns and never on cloud fallback.
 - Tauri commands wired; functional Chat UI (conversations, send, routing picker,
-  cloud-crossing consent banner with Approve/Deny).
+  cloud-crossing consent banner with Approve/Deny, personal-knowledge provenance).
 
 ### Phase 3 — Structured knowledge (verified)
 - `knowledge`: 18 record types, 7 states, sensitivity, provenance, contradictions,
@@ -137,6 +149,26 @@ Local test: `python tools/exercise_pkc_readonly_path.py`
   corpus concepts, architecture, security, operations, development, testing,
   release, troubleshooting, and maintainer handoff with validated local links.
 
+## Daily-use PKC milestone verified 2026-08-16
+- Owner configures PKC from Settings (discover defaults, validate, test
+  connection, enable/disable). Consumer `sammy`, purpose `personal_consigliere`.
+- Chat retrieves PKC only after a local route is committed. Cloud and
+  local→cloud fallback never invoke the bridge and cannot carry PKC evidence.
+- Retrieval judgment skips greetings, arithmetic, and generic world facts.
+- Chat shows a lightweight **Used personal knowledge** provenance control
+  (identifiers and sizes, not corpus bodies).
+- `cargo test --lib`: 223 passed. Workspace extras also green. Vitest: 12 passed.
+- Windows release build: `target\release\sammy.exe` launched successfully.
+  Bundles: `target\release\bundle\msi\Sammy_0.1.0_x64_en-US.msi` and
+  `target\release\bundle\nsis\Sammy_0.1.0_x64-setup.exe`.
+- Diagnostic: `python tools/exercise_pkc_readonly_path.py --mode health|auth|sanitize`.
+
+## Resume point
+PKC daily-use path is in Sammy. Next substantive product work is **not** a
+new architecture: optional explicit memory-review of PKC-grounded turns, then
+the remaining external validations above. PKC, Sammy, StoryKeeper, and the PKC
+Reference Client stay separate.
+
 ## External validation still required
 - Windows code-signing certificate, a live Venice API key, local Tesseract for
   image OCR, and an independent clean-Windows-machine installer smoke test.
@@ -145,4 +177,6 @@ Local test: `python tools/exercise_pkc_readonly_path.py`
 See `EXTERNAL_BLOCKERS.md`. None block the build or tests.
 
 ## Next work
-Complete the external validations listed above before public distribution.
+Owner-facing memory review for PKC-grounded turns (optional, explicit) and
+any remaining external validations (code-signing, clean-machine installer)
+before public distribution. Do not restart PKC architecture.

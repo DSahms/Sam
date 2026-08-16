@@ -12,6 +12,9 @@ Privacy is enforced in the backend: a locked vault blocks private operations;
 route never silently becomes an unconfirmed cloud transmission; and Venice keys
 never return to React.
 
+PKC enable/disable, health checks, authorization, and retrieval decisions are
+audited with identifiers, counts, and hashes — not raw personal evidence.
+
 The first-release tool registry is intentionally restricted to source search,
 corpus lookup, draft generation, non-executing planning, and a mock external
 tool. It does not send email, browse, purchase, delete files, or execute shell

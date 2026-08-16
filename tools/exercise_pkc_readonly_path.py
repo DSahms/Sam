@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
-"""Exercise Sammy's read-only PKC path without enabling the production gate.
+"""Diagnostic tool for Sammy's read-only PKC path.
 
-Uses the PKC Reference Client bridge with consumer_application=sammy.
-Prints hashes and booleans only — never source bodies or secrets.
+This is not the owner experience. Daily use is Settings + Chat in Sammy.
+This script checks the same authorized bridge the application uses.
+
+Modes:
+  health       path + authorization probe (no corpus text printed)
+  auth         authorization boolean only
+  retrieval    authorized retrieval hashes/counts
+  sanitize     confirm bookkeeping is absent from the conversational payload
+  local        optional KoboldCpp grounded call
+  all          default: health + retrieval + local if reachable
+
+Prints JSON only — never source bodies or secrets.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -30,15 +41,15 @@ FORBIDDEN = (
 )
 
 
-def main() -> int:
+def _payload(question: str) -> dict:
     sys.path.insert(0, str(BRIDGE.parent))
     from storykeeper_pkc_bridge import handle_request
 
     request = {
         "bridge_version": "1.0.0",
-        "request_id": "SAMMY-LIVE-READONLY-001",
+        "request_id": "SAMMY-DIAGNOSTIC-001",
         "operation": "protected_retrieval",
-        "question": "What do you remember about moving as a child?",
+        "question": question,
         "chapter_context": "Personal question — Sammy read-only PKC consult",
         "consumer_application": "sammy",
         "recipient_class": "owner_dave",
@@ -49,13 +60,30 @@ def main() -> int:
         "consent_state": "standing_authorization",
         "source_id": SEVEN,
     }
-
     os.chdir(BRIDGE.parent)
-    result = handle_request(request, pkc_root=PKC_ROOT)
+    return handle_request(request, pkc_root=PKC_ROOT)
+
+
+def _health() -> dict:
+    python_ok = True
+    return {
+        "mode": "health",
+        "python_ok": python_ok,
+        "bridge_ok": BRIDGE.is_file(),
+        "root_ok": PKC_ROOT.is_dir(),
+        "consumer": "sammy",
+        "purpose": "personal_consigliere",
+        "local_only": True,
+    }
+
+
+def _retrieval(question: str) -> dict:
+    result = _payload(question)
     payload = result.get("payload") or {}
     answer = payload.get("natural_answer") or ""
     leaks = [marker for marker in FORBIDDEN if marker in answer]
-    report = {
+    return {
+        "mode": "retrieval",
         "ok": bool(result.get("ok")),
         "available": bool(result.get("available")),
         "authorized": bool(payload.get("authorized")),
@@ -68,15 +96,12 @@ def main() -> int:
         else "",
         "payload_chars": len(answer),
         "bookkeeping_in_payload": leaks,
-        "kobold_used": False,
-        "kobold_crossed_cloud": False,
         "durable_memory_write": False,
     }
-    if leaks or not report["authorized"] or not answer:
-        json.dump(report, sys.stdout, indent=2)
-        print()
-        return 2
 
+
+def _kobold(answer: str) -> dict:
+    report = {"kobold_used": False, "kobold_crossed_cloud": False}
     try:
         body = json.dumps(
             {
@@ -119,11 +144,97 @@ def main() -> int:
         json.JSONDecodeError,
         OSError,
     ) as exc:
-        report["kobold_used"] = False
         report["kobold_skip_reason"] = type(exc).__name__
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Sammy PKC diagnostic (not the UI)")
+    parser.add_argument(
+        "--mode",
+        choices=["health", "auth", "retrieval", "sanitize", "local", "all"],
+        default="all",
+    )
+    parser.add_argument(
+        "--question",
+        default="What do you remember about moving as a child?",
+    )
+    args = parser.parse_args()
+
+    if not BRIDGE.is_file() or not PKC_ROOT.is_dir():
+        json.dump(
+            {
+                "ok": False,
+                "state": "misconfigured",
+                "bridge_ok": BRIDGE.is_file(),
+                "root_ok": PKC_ROOT.is_dir(),
+            },
+            sys.stdout,
+            indent=2,
+        )
+        print()
+        return 2
+
+    health = _health()
+    if args.mode == "health":
+        json.dump(health, sys.stdout, indent=2)
+        print()
+        return 0 if health["bridge_ok"] and health["root_ok"] else 2
+
+    retrieved = _retrieval(args.question)
+    if args.mode == "auth":
+        json.dump(
+            {
+                "mode": "auth",
+                "authorized": retrieved["authorized"],
+                "available": retrieved["available"],
+                "consumer": "sammy",
+                "purpose": "personal_consigliere",
+            },
+            sys.stdout,
+            indent=2,
+        )
+        print()
+        return 0 if retrieved["authorized"] else 2
+
+    if args.mode == "sanitize":
+        json.dump(
+            {
+                "mode": "sanitize",
+                "payload_chars": retrieved["payload_chars"],
+                "payload_sha256": retrieved["payload_sha256"],
+                "bookkeeping_in_payload": retrieved["bookkeeping_in_payload"],
+                "model_safe": not retrieved["bookkeeping_in_payload"]
+                and retrieved["authorized"],
+            },
+            sys.stdout,
+            indent=2,
+        )
+        print()
+        return 0 if retrieved["authorized"] and not retrieved["bookkeeping_in_payload"] else 2
+
+    if args.mode == "retrieval":
+        json.dump(retrieved, sys.stdout, indent=2)
+        print()
+        return 0 if retrieved["authorized"] and not retrieved["bookkeeping_in_payload"] else 2
+
+    report = {**health, **retrieved}
+    if args.mode in ("local", "all"):
+        answer_len = retrieved.get("payload_chars") or 0
+        if retrieved["authorized"] and answer_len:
+            # Re-fetch only for the local provider test; never print the body.
+            result = _payload(args.question)
+            answer = (result.get("payload") or {}).get("natural_answer") or ""
+            report.update(_kobold(answer))
+        else:
+            report["kobold_used"] = False
+            report["kobold_skip_reason"] = "no_authorized_payload"
+
     json.dump(report, sys.stdout, indent=2)
     print()
-    return 0 if report["authorized"] and not report["bookkeeping_in_payload"] else 2
+    if not report.get("authorized") or report.get("bookkeeping_in_payload"):
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

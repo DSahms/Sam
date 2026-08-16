@@ -23,6 +23,11 @@ endpoint, test, choose the discovered model, and save. Venice is optional cloud
 processing: enter its model and API key, test, and enable it. The key is encrypted
 inside the active vault and never returned to the interface.
 
+Optional **personal knowledge (PKC)** is a separate system from the vault. In
+Settings, find local defaults, test the connection, then enable it for local
+chats only. It does not upload PKC to the cloud or copy it into Sammy memory.
+See [external PKC](getting-started/external-pkc.md).
+
 ## Chat, knowledge, and memory
 
 Open **Chat**, create a conversation, select routing, and send a message. The
