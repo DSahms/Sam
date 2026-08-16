@@ -1,5 +1,52 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, explainError, type ProviderConfig } from "@/lib/tauri";
+import {
+  api,
+  explainError,
+  type PkcHealthReport,
+  type ProviderConfig,
+} from "@/lib/tauri";
+
+function healthBadgeClass(state: string, probed: boolean): string {
+  if (state === "available_authorized" && probed) return "badge badge-ok";
+  if (
+    state === "disabled" ||
+    state === "retrieval_skipped" ||
+    state === "configured_not_tested"
+  ) {
+    return "badge";
+  }
+  if (state === "connecting") return "badge badge-warn";
+  return "badge badge-error";
+}
+
+function healthLabel(state: string): string {
+  switch (state) {
+    case "disabled":
+      return "Off";
+    case "configured_not_tested":
+      return "Not tested";
+    case "connecting":
+      return "Checking…";
+    case "available_authorized":
+      return "Authorized";
+    case "available_unauthorized":
+      return "Unauthorized";
+    case "pkc_unavailable":
+      return "Unavailable";
+    case "bridge_unavailable":
+      return "Bridge missing";
+    case "python_unavailable":
+      return "Python missing";
+    case "misconfigured":
+      return "Misconfigured";
+    case "local_model_unavailable":
+      return "Local model unavailable";
+    case "cloud_turn_skipped":
+      return "Skipped on cloud turns";
+    default:
+      return state;
+  }
+}
 
 export function SettingsView() {
   const [config, setConfig] = useState<ProviderConfig>({
@@ -15,6 +62,8 @@ export function SettingsView() {
     pkc_bridge_script: "",
     pkc_root: "",
     pkc_source_id: "",
+    pkc_last_health_state: "",
+    pkc_last_health_at: "",
   });
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,12 +78,21 @@ export function SettingsView() {
   const [veniceKey, setVeniceKey] = useState("");
   const [veniceTesting, setVeniceTesting] = useState(false);
   const [veniceResult, setVeniceResult] = useState<string | null>(null);
+  const [pkcHealth, setPkcHealth] = useState<PkcHealthReport | null>(null);
+  const [pkcBusy, setPkcBusy] = useState(false);
+  const [pkcSaved, setPkcSaved] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const c = await api.providerConfigGet();
       setConfig(c);
       setError(null);
+      try {
+        const health = await api.pkcHealthCheck(c, false);
+        setPkcHealth(health);
+      } catch {
+        setPkcHealth(null);
+      }
     } catch (e) {
       setError(explainError(e));
     }
@@ -94,6 +152,72 @@ export function SettingsView() {
       setError(explainError(e));
     } finally {
       setChatBusy(false);
+    }
+  }, [config]);
+
+  const handleSavePkc = useCallback(async () => {
+    setError(null);
+    try {
+      await api.providerConfigSave(config);
+      const refreshed = await api.providerConfigGet();
+      setConfig(refreshed);
+      setPkcSaved(true);
+      setTimeout(() => setPkcSaved(false), 2000);
+      const health = await api.pkcHealthCheck(refreshed, false);
+      setPkcHealth(health);
+    } catch (e) {
+      setError(explainError(e));
+    }
+  }, [config]);
+
+  const handleDiscoverPkc = useCallback(async () => {
+    setError(null);
+    try {
+      const found = await api.pkcDiscoverDefaults();
+      setConfig((current) => ({
+        ...current,
+        pkc_python_executable: current.pkc_python_executable || found.python_executable,
+        pkc_bridge_script: current.pkc_bridge_script || found.bridge_script,
+        pkc_root: current.pkc_root || found.pkc_root,
+        pkc_source_id: current.pkc_source_id || found.source_id,
+      }));
+      if (found.notes.length > 0 && !found.bridge_script && !found.pkc_root) {
+        setError(found.notes.join(" "));
+      }
+    } catch (e) {
+      setError(explainError(e));
+    }
+  }, []);
+
+  const handleTestPkc = useCallback(async () => {
+    setPkcBusy(true);
+    setError(null);
+    try {
+      await api.providerConfigSave(config);
+      const connecting: PkcHealthReport = {
+        state: "connecting",
+        owner_message: "Checking the personal-knowledge connection…",
+        consumer: "sammy",
+        purpose: "personal_consigliere",
+        local_only: true,
+        python_ok: false,
+        bridge_ok: false,
+        root_ok: false,
+        source_configured: !!config.pkc_source_id,
+        authorized: null,
+        probed: false,
+        payload_chars: 0,
+        payload_sha256: null,
+      };
+      setPkcHealth(connecting);
+      const health = await api.pkcHealthCheck(config, true);
+      setPkcHealth(health);
+      const refreshed = await api.providerConfigGet();
+      setConfig(refreshed);
+    } catch (e) {
+      setError(explainError(e));
+    } finally {
+      setPkcBusy(false);
     }
   }, [config]);
 
@@ -202,11 +326,38 @@ export function SettingsView() {
       </section>
 
       <section className="card">
-        <h2 className="card-title">External PKC (read-only)</h2>
+        <h2 className="card-title">Personal knowledge (PKC)</h2>
         <p className="muted small">
-          Optional queries to the Personal Knowledge Corpus product — not Sammy&apos;s
-          internal vault. Disabled by default. Unauthorized evidence never reaches the
-          model. PKC is skipped on cloud-bound turns.
+          Optional read-only access to the separate Personal Knowledge Corpus product —
+          not Sammy&apos;s encrypted vault. Off by default. Sammy never writes to PKC,
+          never copies it into lasting Sammy memory, and never sends it to a cloud model.
+        </p>
+        <div className="row" style={{ marginBottom: "12px" }}>
+          <span
+            className={healthBadgeClass(
+              pkcHealth?.state ||
+                (config.pkc_enabled ? "configured_not_tested" : "disabled"),
+              !!pkcHealth?.probed ||
+                config.pkc_last_health_state === "available_authorized",
+            )}
+          >
+            {pkcBusy
+              ? "Checking…"
+              : healthLabel(
+                  pkcHealth?.state ||
+                    config.pkc_last_health_state ||
+                    (config.pkc_enabled ? "configured_not_tested" : "disabled"),
+                )}
+          </span>
+          {config.pkc_last_health_at && (
+            <span className="muted small">Last checked {config.pkc_last_health_at}</span>
+          )}
+        </div>
+        <p className="muted small">
+          {pkcHealth?.owner_message ||
+            (config.pkc_enabled
+              ? "Use Test connection to verify authorization before relying on it in chat."
+              : "Enable this only if you want Sammy to consult your durable personal knowledge on local turns.")}
         </p>
         <div className="form-grid">
           <label className="checkbox-label">
@@ -215,48 +366,83 @@ export function SettingsView() {
               checked={config.pkc_enabled}
               onChange={(e) => setConfig({ ...config, pkc_enabled: e.target.checked })}
             />
-            Enable read-only PKC retrieval
+            Enable read-only personal knowledge
           </label>
           <label>
-            Python executable
-            <input
-              type="text"
-              value={config.pkc_python_executable}
-              onChange={(e) =>
-                setConfig({ ...config, pkc_python_executable: e.target.value })
-              }
-              placeholder="python"
-            />
+            Consumer
+            <input type="text" value="sammy" readOnly />
+          </label>
+          <label>
+            Purpose
+            <input type="text" value="personal_consigliere" readOnly />
           </label>
           <label className="span-2">
-            Bridge script (absolute path)
-            <input
-              type="text"
-              value={config.pkc_bridge_script}
-              onChange={(e) => setConfig({ ...config, pkc_bridge_script: e.target.value })}
-              placeholder="D:\dev\StoryKeeper\tools\storykeeper_pkc_bridge.py"
-            />
-          </label>
-          <label className="span-2">
-            PKC root (optional)
+            PKC location
             <input
               type="text"
               value={config.pkc_root}
               onChange={(e) => setConfig({ ...config, pkc_root: e.target.value })}
+              placeholder="Folder containing the Personal Knowledge Corpus"
             />
           </label>
           <label className="span-2">
-            Canonical source ID
+            Source identity
             <input
               type="text"
               value={config.pkc_source_id}
               onChange={(e) => setConfig({ ...config, pkc_source_id: e.target.value })}
+              placeholder="Discovered or pasted source ID"
             />
           </label>
         </div>
+        <p className="muted small">
+          Local-only: eligible local chats may consult PKC. Cloud chats skip it entirely.
+        </p>
+        <details className="pkc-advanced">
+          <summary>Advanced connection details</summary>
+          <div className="form-grid" style={{ marginTop: "8px" }}>
+            <label>
+              Python
+              <input
+                type="text"
+                value={config.pkc_python_executable}
+                onChange={(e) =>
+                  setConfig({ ...config, pkc_python_executable: e.target.value })
+                }
+                placeholder="python"
+              />
+            </label>
+            <label className="span-2">
+              Bridge script
+              <input
+                type="text"
+                value={config.pkc_bridge_script}
+                onChange={(e) =>
+                  setConfig({ ...config, pkc_bridge_script: e.target.value })
+                }
+                placeholder="Absolute path to the PKC bridge"
+              />
+            </label>
+          </div>
+        </details>
         <div className="row">
-          <button type="button" className="btn btn-primary" onClick={handleSave}>
-            {saved ? "Saved ✓" : "Save PKC settings"}
+          <button type="button" className="btn" onClick={() => void handleDiscoverPkc()}>
+            Find local defaults
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void handleSavePkc()}
+          >
+            {pkcSaved ? "Saved ✓" : "Save"}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void handleTestPkc()}
+            disabled={pkcBusy}
+          >
+            {pkcBusy ? "Testing…" : "Test connection"}
           </button>
         </div>
       </section>

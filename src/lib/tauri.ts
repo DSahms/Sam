@@ -175,6 +175,11 @@ export const api = {
   veniceTestConnection: () => invoke<string[]>("venice_test_connection"),
   koboldcppTestConnection: (endpoint: string) =>
     invoke<string[]>("koboldcpp_test_connection", { endpoint }),
+  pkcDiscoverDefaults: () => invoke<PkcDiscovery>("pkc_discover_defaults"),
+  pkcHealthCheck: (config: ProviderConfig, probe: boolean) =>
+    invoke<PkcHealthReport>("pkc_health_check", { config, probe }),
+  pkcProvenanceOpened: (messageId: string) =>
+    invoke<void>("pkc_provenance_opened", { messageId }),
   koboldcppChat: (
     endpoint: string,
     model: string,
@@ -222,6 +227,7 @@ export interface MessageSummary {
   role: string;
   content: string;
   seq: number;
+  pkc?: PkcTurnView | null;
 }
 
 export interface CloudConsentView {
@@ -244,6 +250,46 @@ export interface ChatSendResult {
   crossed_to_cloud: boolean;
   consent_required: CloudConsentView | null;
   prompt_summary: PromptSectionSummary[];
+  pkc: PkcTurnView;
+}
+
+export interface PkcTurnView {
+  used: boolean;
+  state: string;
+  owner_notice: string | null;
+  source_id: string | null;
+  classification: string | null;
+  request_id: string | null;
+  payload_sha256: string | null;
+  payload_chars: number;
+  authorized: boolean | null;
+  skip_reason: string | null;
+}
+
+export interface PkcDiscovery {
+  python_executable: string;
+  bridge_script: string;
+  pkc_root: string;
+  source_id: string;
+  consumer: string;
+  purpose: string;
+  notes: string[];
+}
+
+export interface PkcHealthReport {
+  state: string;
+  owner_message: string;
+  consumer: string;
+  purpose: string;
+  local_only: boolean;
+  python_ok: boolean;
+  bridge_ok: boolean;
+  root_ok: boolean;
+  source_configured: boolean;
+  authorized: boolean | null;
+  probed: boolean;
+  payload_chars: number;
+  payload_sha256: string | null;
 }
 
 export interface IdentityVersionEntry {
@@ -370,4 +416,6 @@ export interface ProviderConfig {
   pkc_bridge_script: string;
   pkc_root: string;
   pkc_source_id: string;
+  pkc_last_health_state: string;
+  pkc_last_health_at: string;
 }

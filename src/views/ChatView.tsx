@@ -227,6 +227,34 @@ export function ChatView() {
             <div key={m.message_id} className={"msg msg-" + m.role}>
               <div className="msg-role">{m.role}</div>
               <div className="msg-content">{m.content}</div>
+              {m.role === "assistant" && m.pkc?.used && (
+                <details
+                  className="pkc-provenance"
+                  onToggle={(e) => {
+                    if ((e.target as HTMLDetailsElement).open) {
+                      void api.pkcProvenanceOpened(m.message_id);
+                    }
+                  }}
+                >
+                  <summary>Used personal knowledge</summary>
+                  <p className="muted small">
+                    Sammy consulted authorized personal knowledge for this answer. It was
+                    not copied into Sammy&apos;s lasting memory.
+                  </p>
+                  <ul className="muted small pkc-provenance-meta">
+                    {m.pkc.classification && (
+                      <li>Kind: stored source-backed knowledge</li>
+                    )}
+                    {m.pkc.source_id && <li>Source: {m.pkc.source_id}</li>}
+                    {m.pkc.payload_chars > 0 && (
+                      <li>Evidence size: {m.pkc.payload_chars} characters</li>
+                    )}
+                  </ul>
+                </details>
+              )}
+              {m.role === "assistant" && !m.pkc?.used && m.pkc?.owner_notice && (
+                <div className="muted small pkc-notice">{m.pkc.owner_notice}</div>
+              )}
             </div>
           ))}
           <div ref={messagesEnd} />

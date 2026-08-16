@@ -459,6 +459,35 @@ select:focus {
   word-break: break-word;
 }
 
+.pkc-provenance {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.pkc-provenance summary {
+  cursor: pointer;
+  color: var(--ok);
+}
+
+.pkc-provenance-meta {
+  margin: 6px 0 0 16px;
+}
+
+.pkc-notice {
+  margin-top: 6px;
+}
+
+.pkc-advanced {
+  margin: 8px 0;
+}
+
+.pkc-advanced summary {
+  cursor: pointer;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
 .consent-banner {
   margin: 8px 0;
 }
