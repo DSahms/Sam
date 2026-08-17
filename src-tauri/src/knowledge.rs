@@ -230,6 +230,29 @@ impl NewRecord {
     }
 }
 
+/// Attach source/provenance metadata after create. Used when a Memory Review
+/// candidate is approved so PKC origin survives without storing corpus bodies.
+pub fn attach_review_metadata(
+    conn: &Connection,
+    id: RecordId,
+    source_ids: &[String],
+    provenance: &serde_json::Value,
+    sensitivity: Sensitivity,
+) -> AppResult<()> {
+    conn.execute(
+        "UPDATE knowledge_records_full
+         SET source_ids=?1, provenance=?2, sensitivity=?3
+         WHERE record_id=?4",
+        params![
+            serde_json::to_string(source_ids)?,
+            serde_json::to_string(provenance)?,
+            sensitivity.as_str(),
+            id.to_string(),
+        ],
+    )?;
+    Ok(())
+}
+
 /// Create a record. Returns its id. Inserts into both the table and the FTS
 /// index (current records only).
 pub fn create(conn: &Connection, vault_id: &str, new: &NewRecord) -> AppResult<RecordId> {

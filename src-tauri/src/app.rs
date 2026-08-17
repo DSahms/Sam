@@ -929,6 +929,14 @@ pub struct MemoryCandidateView {
     pub crossed_to_cloud: bool,
     pub created_at: String,
     pub state: String,
+    pub origin: String,
+    pub epistemic_class: Option<String>,
+    pub pkc_source_id: Option<String>,
+    pub payload_sha256: Option<String>,
+    pub payload_chars: u32,
+    pub original_proposed_text: Option<String>,
+    pub owner_edited: bool,
+    pub conflict_record_id: Option<String>,
 }
 
 impl From<&crate::memory::MemoryCandidate> for MemoryCandidateView {
@@ -947,6 +955,14 @@ impl From<&crate::memory::MemoryCandidate> for MemoryCandidateView {
             crossed_to_cloud: m.crossed_to_cloud,
             created_at: m.created_at.clone(),
             state: m.state.clone(),
+            origin: m.origin.clone(),
+            epistemic_class: m.epistemic_class.clone(),
+            pkc_source_id: m.pkc_source_id.clone(),
+            payload_sha256: m.payload_sha256.clone(),
+            payload_chars: m.payload_chars,
+            original_proposed_text: m.original_proposed_text.clone(),
+            owner_edited: m.owner_edited,
+            conflict_record_id: m.conflict_record_id.clone(),
         }
     }
 }
@@ -1041,6 +1057,26 @@ pub fn memory_delete(
     state.with_active(|v| {
         let conn = v.lock_conn();
         crate::memory::delete(&conn, id)
+    })?
+}
+
+/// Explicit owner keep: queue a PKC-grounded statement for Memory Review.
+/// Does not write durable memory and does not modify PKC.
+#[tauri::command]
+pub fn memory_keep_from_chat(
+    state: tauri::State<AppState>,
+    message_id: String,
+    proposed_text: String,
+    epistemic_class: String,
+) -> AppResult<crate::memory::KeepResult> {
+    state.with_active(|v| {
+        let conn = v.lock_conn();
+        crate::memory::keep_from_pkc_turn(
+            &conn,
+            &message_id,
+            &proposed_text,
+            &epistemic_class,
+        )
     })?
 }
 

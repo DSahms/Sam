@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, explainError, type MemoryCandidateView } from "@/lib/tauri";
+import { api, explainError, pkcClassLabel, type MemoryCandidateView } from "@/lib/tauri";
 
 const STATE_FILTERS = [
   "pending",
@@ -48,9 +48,10 @@ export function MemoryReviewView() {
       <section className="card">
         <h2 className="card-title">Memory candidates</h2>
         <p className="muted small">
-          Conversation content never becomes durable memory automatically. Review each
-          candidate: approve (promotes to a knowledge record), edit and approve, reject,
-          defer, or mark temporary.
+          Conversation content and personal-knowledge lookups never become lasting
+          memory automatically. Review each candidate: approve (promotes to a
+          knowledge record), edit and approve, reject, defer, or mark temporary.
+          Editing a candidate does not change the original personal-knowledge source.
         </p>
         <div className="row">
           {STATE_FILTERS.map((s) => (
@@ -75,6 +76,14 @@ export function MemoryReviewView() {
               <div className="record-header">
                 <span className={"badge badge-" + statusBadge(c.state)}>{c.state}</span>
                 <span className="muted small">{c.record_type}</span>
+                {c.origin === "external_pkc" && (
+                  <span className="badge" title="Queued from a personal-knowledge chat turn">
+                    from personal knowledge
+                  </span>
+                )}
+                {c.epistemic_class && (
+                  <span className="muted small">{pkcClassLabel(c.epistemic_class)}</span>
+                )}
                 {c.crossed_to_cloud && (
                   <span
                     className="badge badge-warn"
@@ -107,6 +116,26 @@ export function MemoryReviewView() {
               ) : (
                 <>
                   <div className="record-text">{c.proposed_text}</div>
+                  {c.origin === "external_pkc" && (
+                    <ul className="muted small pkc-provenance-meta">
+                      {c.epistemic_class === "inference" && (
+                        <li>This is a suggestion to review, not stored fact.</li>
+                      )}
+                      {c.epistemic_class === "testimony" && (
+                        <li>This came from something you previously described.</li>
+                      )}
+                      {c.pkc_source_id && <li>Source: {c.pkc_source_id}</li>}
+                      {c.owner_edited && c.original_proposed_text && (
+                        <li>Original proposal: {c.original_proposed_text}</li>
+                      )}
+                      {c.conflict_record_id && (
+                        <li>
+                          Conflicts with an existing lasting memory (
+                          {c.conflict_record_id}). Both are kept until you decide.
+                        </li>
+                      )}
+                    </ul>
+                  )}
                   {c.reason && <div className="muted small">reason: {c.reason}</div>}
                   <div className="record-actions">
                     {c.state === "pending" && (

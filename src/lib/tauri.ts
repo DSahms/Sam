@@ -154,6 +154,16 @@ export const api = {
   memoryMarkTemporary: (candidateId: string) =>
     invoke<void>("memory_mark_temporary", { candidateId }),
   memoryDelete: (candidateId: string) => invoke<void>("memory_delete", { candidateId }),
+  memoryKeepFromChat: (
+    messageId: string,
+    proposedText: string,
+    epistemicClass: string,
+  ) =>
+    invoke<KeepResult>("memory_keep_from_chat", {
+      messageId,
+      proposedText,
+      epistemicClass,
+    }),
 
   // Permissions
   toolRegistry: () => invoke<ToolDeclarationView[]>("tool_registry"),
@@ -382,6 +392,51 @@ export interface MemoryCandidateView {
   crossed_to_cloud: boolean;
   created_at: string;
   state: string;
+  origin?: string;
+  epistemic_class?: string | null;
+  pkc_source_id?: string | null;
+  payload_sha256?: string | null;
+  payload_chars?: number;
+  original_proposed_text?: string | null;
+  owner_edited?: boolean;
+  conflict_record_id?: string | null;
+}
+
+export interface KeepResult {
+  candidate_id: string;
+  created: boolean;
+  duplicate: boolean;
+  already_durable: boolean;
+  conflict_record_id: string | null;
+}
+
+export type EpistemicClass = "stored_fact" | "testimony" | "inference";
+
+export function pkcClassLabel(cls?: string | null): string {
+  switch (cls) {
+    case "testimony":
+      return "Something you described";
+    case "inference":
+      return "A suggestion to review";
+    case "stored_fact":
+    case "fact":
+      return "Stored personal knowledge";
+    default:
+      return "Personal knowledge";
+  }
+}
+
+export function normalizeEpistemicClass(cls?: string | null): EpistemicClass {
+  if (cls === "testimony" || cls === "inference") return cls;
+  return "stored_fact";
+}
+
+export function suggestKeepText(content: string): string {
+  const cleaned = content.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  const match = cleaned.match(/.*?[.!?](?:\s|$)/);
+  const sentence = match ? match[0].trim() : cleaned;
+  return sentence.length <= 280 ? sentence : `${sentence.slice(0, 277)}…`;
 }
 
 export interface ToolDeclarationView {

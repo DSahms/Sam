@@ -118,6 +118,7 @@ pub fn run() {
             app::memory_defer,
             app::memory_mark_temporary,
             app::memory_delete,
+            app::memory_keep_from_chat,
             app::tool_registry,
             app::permission_list_active,
             app::permission_grant,

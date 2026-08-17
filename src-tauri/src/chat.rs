@@ -805,6 +805,150 @@ print(json.dumps({{
         assert_eq!(knowledge_count(&conn), 0);
     }
 
+    fn last_assistant_id(
+        conn: &rusqlite::Connection,
+        conv: crate::ids::ConversationId,
+    ) -> String {
+        conversation::messages(conn, conv)
+            .unwrap()
+            .into_iter()
+            .rev()
+            .find(|m| m.role == "assistant")
+            .unwrap()
+            .message_id
+    }
+
+    #[test]
+    fn pkc_keep_after_retrieval_is_candidate_until_approval() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("Dave grew up in Gloucester Township.");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 32,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert!(result.pkc.used);
+        crate::memory::ensure_schema(&conn).unwrap();
+        let mem: i64 = conn
+            .query_row("SELECT count(*) FROM memory_candidates", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mem, 0, "retrieval must not create a review candidate");
+        let assistant = last_assistant_id(&conn, conv);
+        let kept = crate::memory::keep_from_pkc_turn(
+            &conn,
+            &assistant,
+            "Grew up in Gloucester Township",
+            "stored_fact",
+        )
+        .unwrap();
+        assert!(kept.created);
+        assert_eq!(knowledge_count(&conn), 0);
+        let kid = crate::memory::approve(
+            &conn,
+            "v1",
+            crate::ids::MemoryCandidateId::parse(&kept.candidate_id).unwrap(),
+            Some("Grew up in Gloucester Township."),
+        )
+        .unwrap();
+        assert_eq!(knowledge_count(&conn), 1);
+        let rec =
+            crate::knowledge::get(&conn, crate::ids::RecordId::parse(&kid).unwrap())
+                .unwrap();
+        assert_eq!(rec.sensitivity, "local_only");
+        assert_eq!(rec.canonical_text, "Grew up in Gloucester Township.");
+        run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        assert_eq!(knowledge_count(&conn), 1);
+        let pending =
+            crate::memory::list(&conn, Some(crate::memory::CandidateState::Pending))
+                .unwrap()
+                .len();
+        assert_eq!(pending, 0);
+        let _ = ran;
+    }
+
+    #[test]
+    fn cloud_turn_cannot_create_pkc_keep_candidate() {
+        let conn = fresh_conn();
+        let (script, ran) = fake_pkc_bridge("MUST_NOT_CROSS_TO_CLOUD");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster {
+            local: vec![Arc::new(MockProvider::echo())],
+            cloud: vec![Arc::new(MockProvider::fixed("cloud-answer"))],
+        };
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::PreferCloud,
+            max_tokens: 16,
+            model: "mock-1".into(),
+        };
+        let result =
+            run_turn(&conn, &roster, &[true], &[true], &turn, &always_allow()).unwrap();
+        assert!(!result.pkc.used);
+        crate::memory::ensure_schema(&conn).unwrap();
+        let assistant = last_assistant_id(&conn, conv);
+        assert!(crate::memory::keep_from_pkc_turn(
+            &conn,
+            &assistant,
+            "Grew up in Gloucester Township",
+            "stored_fact",
+        )
+        .is_err());
+        assert!(!ran.exists());
+        assert_eq!(knowledge_count(&conn), 0);
+    }
+
+    #[test]
+    fn reject_then_retrieval_does_not_recreate_candidate() {
+        let conn = fresh_conn();
+        let (script, _ran) = fake_pkc_bridge("Dave grew up in Gloucester Township.");
+        enable_pkc(&conn, &script);
+        let conv = conversation::create(&conn, Some("c")).unwrap();
+        let roster = ProviderRoster::mock_only();
+        let turn = ChatTurn {
+            conversation_id: conv,
+            user_text: "Where did I grow up?".into(),
+            routing: RoutingMode::LocalOnly,
+            max_tokens: 32,
+            model: "mock-1".into(),
+        };
+        run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        crate::memory::ensure_schema(&conn).unwrap();
+        let assistant = last_assistant_id(&conn, conv);
+        let kept = crate::memory::keep_from_pkc_turn(
+            &conn,
+            &assistant,
+            "Grew up in Gloucester Township",
+            "stored_fact",
+        )
+        .unwrap();
+        crate::memory::reject(
+            &conn,
+            crate::ids::MemoryCandidateId::parse(&kept.candidate_id).unwrap(),
+        )
+        .unwrap();
+        run_turn(&conn, &roster, &[true], &[], &turn, &always_allow()).unwrap();
+        let pending =
+            crate::memory::list(&conn, Some(crate::memory::CandidateState::Pending))
+                .unwrap()
+                .len();
+        assert_eq!(pending, 0);
+        assert_eq!(knowledge_count(&conn), 0);
+        let rejected =
+            crate::memory::list(&conn, Some(crate::memory::CandidateState::Rejected))
+                .unwrap()
+                .len();
+        assert_eq!(rejected, 1);
+    }
+
     #[test]
     fn greeting_does_not_query_pkc() {
         let conn = fresh_conn();

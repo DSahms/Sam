@@ -318,6 +318,68 @@ fn workflow_memory() {
     );
 }
 
+#[test]
+fn workflow_pkc_memory_review() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    sammy_lib::memory::ensure_schema(&conn).unwrap();
+    setup_knowledge_schema(&conn);
+    sammy_lib::conversation::ensure_schema(&conn).unwrap();
+    sammy_lib::external_pkc::ensure_provenance_schema(&conn).unwrap();
+    let conv = conversation::create(&conn, Some("pkc")).unwrap();
+    conversation::append_message(&conn, conv, Role::User, "Where did I grow up?")
+        .unwrap();
+    let assistant = conversation::append_message(
+        &conn,
+        conv,
+        Role::Assistant,
+        "You grew up in Gloucester Township.",
+    )
+    .unwrap();
+    sammy_lib::external_pkc::store_provenance(
+        &conn,
+        &assistant.to_string(),
+        &sammy_lib::external_pkc::PkcTurnView {
+            used: true,
+            state: "available_authorized".into(),
+            source_id: Some("SRC-SHA256-test".into()),
+            classification: Some("stored_fact".into()),
+            payload_sha256: Some("abc123".into()),
+            payload_chars: 40,
+            authorized: Some(true),
+            ..sammy_lib::external_pkc::PkcTurnView::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        sammy_lib::memory::list(&conn, None).unwrap().len(),
+        0,
+        "retrieval provenance alone must not create a candidate"
+    );
+    let kept = sammy_lib::memory::keep_from_pkc_turn(
+        &conn,
+        &assistant.to_string(),
+        "Grew up in Gloucester Township",
+        "stored_fact",
+    )
+    .unwrap();
+    assert!(kept.created);
+    let kid = sammy_lib::memory::approve(
+        &conn,
+        "v",
+        sammy_lib::ids::MemoryCandidateId::parse(&kept.candidate_id).unwrap(),
+        Some("Grew up in Gloucester Township."),
+    )
+    .unwrap();
+    let rec =
+        knowledge::get(&conn, sammy_lib::ids::RecordId::parse(&kid).unwrap()).unwrap();
+    assert_eq!(rec.sensitivity, "local_only");
+    assert_eq!(rec.canonical_text, "Grew up in Gloucester Township.");
+    assert_eq!(
+        rec.provenance["epistemic_class"].as_str().unwrap(),
+        "stored_fact"
+    );
+}
+
 // §36: Provider privacy
 // 1. Routing local_only → 2. Mock provider used → 3. No cloud crossing
 #[test]

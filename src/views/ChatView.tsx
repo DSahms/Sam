@@ -2,9 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   explainError,
+  normalizeEpistemicClass,
+  pkcClassLabel,
   ROUTING_MODE_LABELS,
+  suggestKeepText,
   type ChatSendResult,
   type ConversationSummary,
+  type EpistemicClass,
   type MessageSummary,
   type RoutingMode,
 } from "@/lib/tauri";
@@ -243,13 +247,14 @@ export function ChatView() {
                   </p>
                   <ul className="muted small pkc-provenance-meta">
                     {m.pkc.classification && (
-                      <li>Kind: stored source-backed knowledge</li>
+                      <li>Kind: {pkcClassLabel(m.pkc.classification)}</li>
                     )}
                     {m.pkc.source_id && <li>Source: {m.pkc.source_id}</li>}
                     {m.pkc.payload_chars > 0 && (
                       <li>Evidence size: {m.pkc.payload_chars} characters</li>
                     )}
                   </ul>
+                  <KeepToReview message={m} />
                 </details>
               )}
               {m.role === "assistant" && !m.pkc?.used && m.pkc?.owner_notice && (
@@ -317,6 +322,76 @@ export function ChatView() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function KeepToReview({ message }: { message: MessageSummary }) {
+  const [text, setText] = useState(() => suggestKeepText(message.content));
+  const [cls, setCls] = useState<EpistemicClass>(() =>
+    normalizeEpistemicClass(message.pkc?.classification),
+  );
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const handleKeep = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const result = await api.memoryKeepFromChat(message.message_id, text, cls);
+      if (result.already_durable) {
+        setStatus("Sammy already has this as lasting memory. Nothing new was queued.");
+      } else if (result.duplicate) {
+        setStatus("Already in Memory Review. Open that page to approve, edit, or reject it.");
+      } else {
+        const conflict = result.conflict_record_id
+          ? " A different lasting memory from the same source is already stored — review will show both."
+          : "";
+        setStatus(
+          "Added to Memory Review. It is not lasting memory until you approve it." + conflict,
+        );
+      }
+    } catch (e) {
+      setStatus(explainError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pkc-keep">
+      <p className="muted small">
+        Using personal knowledge does not teach Sammy lasting memory. Add a short
+        statement to Memory Review if you want to keep it.
+      </p>
+      <label className="pkc-keep-label">
+        Statement to review
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={2}
+        />
+      </label>
+      <label className="pkc-keep-label">
+        Kind
+        <select
+          value={cls}
+          onChange={(e) => setCls(e.target.value as EpistemicClass)}
+        >
+          <option value="stored_fact">Stored personal knowledge</option>
+          <option value="testimony">Something you described</option>
+          <option value="inference">A suggestion to review</option>
+        </select>
+      </label>
+      <button
+        type="button"
+        className="btn"
+        onClick={() => void handleKeep()}
+        disabled={busy || !text.trim()}
+      >
+        {busy ? "…" : "Add to Memory Review"}
+      </button>
+      {status && <p className="muted small">{status}</p>}
     </div>
   );
 }

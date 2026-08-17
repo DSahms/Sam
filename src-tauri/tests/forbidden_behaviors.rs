@@ -180,6 +180,65 @@ fn forbidden_automatic_memory_approval() {
     assert_eq!(knowledge_count_after, 1);
 }
 
+#[test]
+fn forbidden_pkc_keep_is_not_auto_approval() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    sammy_lib::memory::ensure_schema(&conn).unwrap();
+    setup_knowledge_schema(&conn);
+    sammy_lib::conversation::ensure_schema(&conn).unwrap();
+    sammy_lib::external_pkc::ensure_provenance_schema(&conn).unwrap();
+    let conv = conversation::create(&conn, Some("pkc")).unwrap();
+    conversation::append_message(&conn, conv, Role::User, "Where did I grow up?")
+        .unwrap();
+    let assistant = conversation::append_message(
+        &conn,
+        conv,
+        Role::Assistant,
+        "You grew up in Gloucester Township.",
+    )
+    .unwrap();
+    sammy_lib::external_pkc::store_provenance(
+        &conn,
+        &assistant.to_string(),
+        &sammy_lib::external_pkc::PkcTurnView {
+            used: true,
+            state: "available_authorized".into(),
+            source_id: Some("SRC-SHA256-test".into()),
+            classification: Some("stored_fact".into()),
+            payload_chars: 12,
+            authorized: Some(true),
+            ..sammy_lib::external_pkc::PkcTurnView::default()
+        },
+    )
+    .unwrap();
+    let kept = sammy_lib::memory::keep_from_pkc_turn(
+        &conn,
+        &assistant.to_string(),
+        "Grew up in Gloucester Township",
+        "stored_fact",
+    )
+    .unwrap();
+    let knowledge_count: i64 = conn
+        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(knowledge_count, 0);
+    sammy_lib::memory::approve(
+        &conn,
+        "v",
+        sammy_lib::ids::MemoryCandidateId::parse(&kept.candidate_id).unwrap(),
+        None,
+    )
+    .unwrap();
+    let after: i64 = conn
+        .query_row("SELECT count(*) FROM knowledge_records_full", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(after, 1);
+}
+
 // §37: Rejected memories appear in retrieval.
 #[test]
 fn forbidden_rejected_memory_in_retrieval() {

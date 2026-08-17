@@ -145,6 +145,24 @@ pub const MIGRATIONS: &[Migration] = &[
                 created_at TEXT NOT NULL
               );",
     },
+    // Version 7: body-free provenance for Memory Review candidates (PKC origin).
+    Migration {
+        version: 7,
+        description: "memory candidate provenance (PKC origin, no corpus bodies)",
+        sql: "CREATE TABLE IF NOT EXISTS memory_candidate_provenance (
+                candidate_id TEXT PRIMARY KEY,
+                origin TEXT NOT NULL DEFAULT 'conversation',
+                epistemic_class TEXT,
+                pkc_source_id TEXT,
+                pkc_request_id TEXT,
+                payload_sha256 TEXT,
+                payload_chars INTEGER NOT NULL DEFAULT 0,
+                original_proposed_text TEXT NOT NULL DEFAULT '',
+                owner_edited INTEGER NOT NULL DEFAULT 0,
+                conflict_record_id TEXT,
+                created_at TEXT NOT NULL
+              );",
+    },
 ];
 
 /// The highest migration version defined.
@@ -252,12 +270,12 @@ mod tests {
         let count: i64 = c
             .query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN \
-                 ('knowledge_records','conversations','messages','sources','schema_version','message_pkc_provenance')",
+                 ('knowledge_records','conversations','messages','sources','schema_version','message_pkc_provenance','memory_candidate_provenance')",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 6);
+        assert_eq!(count, 7);
     }
 
     #[test]
