@@ -87,15 +87,16 @@ A PR that does not pass `make check` is not mergeable.
   Source maps are on; the binary is unsigned and unoptimized.
 - `npm run tauri:build` builds the Rust binary in release mode, builds the
   frontend with `tsc -b && vite build`, and produces Windows installers
-  (MSI and NSIS by default) in `src-tauri/target/release/bundle/`.
+  (MSI and NSIS by default) in `target/release/bundle/` at the repository root.
 
 ## Code signing
 
-Sammy does **not yet** possess a code-signing certificate. As a result,
-production builds are **unsigned** dev packages. Windows SmartScreen and
-Defender will warn on first run. This is recorded as a release blocker in
-`EXTERNAL_BLOCKERS.md` and must be resolved before any public release; it
-is not a problem for local development.
+Sammy does **not yet** possess a code-signing certificate. Production builds
+are **unsigned** development packages. Windows SmartScreen and Defender will
+warn on first run. Read [Windows code signing](development/windows-code-signing.md)
+before adding Tauri signing keys. Do not purchase a certificate from a
+development session. This remains a public-release blocker in
+`EXTERNAL_BLOCKERS.md`; it is not a problem for local development.
 
 ## Repository layout
 

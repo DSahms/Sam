@@ -9,6 +9,7 @@ This documentation describes the implemented `0.1.0` release candidate.
 | I want to… | Start here |
 | --- | --- |
 | Install and talk to a local model | [Quick start](getting-started/quick-start.md) |
+| Check an installer or a Windows warning | [Verify Windows packages](getting-started/verify-windows-packages.md) |
 | Understand the product model | [Personal Knowledge Corpus](concepts/personal-knowledge-corpus.md) |
 | Use a specific screen | [User guide](#user-guide) |
 | Diagnose a failure | [Troubleshooting](TROUBLESHOOTING.md) |
@@ -22,6 +23,9 @@ New to localhost, SQLCipher, OCR, or vector indexes? The
 ## Getting started
 
 - [Installation](getting-started/installation.md)
+- [Windows security warnings](getting-started/windows-security-warnings.md)
+- [Verify Windows packages](getting-started/verify-windows-packages.md)
+- [Clean-Windows validation](getting-started/windows-clean-install-validation.md)
 - [First run](getting-started/first-run.md)
 - [Quick start](getting-started/quick-start.md)
 - [KoboldCpp](getting-started/koboldcpp.md)
@@ -66,6 +70,7 @@ New to localhost, SQLCipher, OCR, or vector indexes? The
 - [Tauri commands](development/tauri-commands.md)
 - [Adding a provider](development/adding-a-provider.md)
 - [Release process](development/release-process.md)
+- [Windows code signing](development/windows-code-signing.md)
 - [Maintainer guide](development/MAINTAINER-GUIDE.md)
 
 ## Operations and reference

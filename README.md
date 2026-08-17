@@ -77,10 +77,15 @@ Release builds produce two unsigned Windows 11 x64 installers:
 | MSI | `target/release/bundle/msi/Sammy_0.1.0_x64_en-US.msi` | Needs an administrator session |
 
 Unsigned development packages may trigger a Windows reputation warning. Verify
-the artifact source; do not disable Windows security controls globally. Public
-distribution still requires a code-signing certificate.
+the SHA-256; do not disable Windows security controls globally. Public
+distribution still requires a code-signing certificate and a clean-Windows
+installer pass. Neither is complete yet.
 
 [Installation details](docs/getting-started/installation.md) ·
+[Windows security warnings](docs/getting-started/windows-security-warnings.md) ·
+[Verify packages](docs/getting-started/verify-windows-packages.md) ·
+[Clean-Windows validation](docs/getting-started/windows-clean-install-validation.md) ·
+[Code-signing readiness](docs/development/windows-code-signing.md) ·
 [Release process](docs/development/release-process.md)
 
 ---

@@ -35,9 +35,11 @@ a visible error while a command is still running.
 
 Rust unit tests sit beside modules. `e2e_workflows.rs` crosses subsystem
 boundaries; `forbidden_behaviors.rs` proves privacy/security negatives;
-`vault_lifecycle.rs` covers key lifecycle and isolation; provider and ingestion
-modules contain deterministic transport/extractor coverage. Frontend Vitest tests
-cover command wrappers, navigation, and Backup & Recovery.
+`vault_lifecycle.rs` covers key lifecycle and isolation; `windows_packaging.rs`
+locks installer configuration and scans source (and, when present, release
+binaries) for development-path leaks; provider and ingestion modules contain
+deterministic transport/extractor coverage. Frontend Vitest tests cover command
+wrappers, navigation, and Backup & Recovery.
 
 `live_koboldcpp.rs` is the only environment-dependent provider test. With an API
 at `localhost:5001`, run:

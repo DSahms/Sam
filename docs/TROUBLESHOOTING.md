@@ -10,12 +10,22 @@ private prompts. Each section gives a likely cause, diagnosis, and safe fix.
 
 Confirm Windows 11 x64 and the correct installer architecture. MSI installation
 requires administrator privileges; use NSIS for the current-user path. Unsigned
-builds can trigger reputation controls—verify provenance rather than disabling
-security globally. For source builds, verify MSVC tools, Node 22, Rust, and
-Strawberry Perl.
+builds can trigger reputation controls—verify the SHA-256 rather than disabling
+security globally. See [Windows security warnings](getting-started/windows-security-warnings.md)
+and [verify packages](getting-started/verify-windows-packages.md). For source
+builds, verify MSVC tools, Node 22, Rust, and Strawberry Perl.
 
 **Diagnose:** MSI exit code `1603` with error `1925` means administrator
 privileges are missing. If no window opens, check Task Manager for a Sammy process.
+
+| What you see | Likely cause | What to do |
+| --- | --- | --- |
+| SmartScreen “Windows protected your PC” | Unsigned development package | Check SHA-256; do not disable SmartScreen |
+| MSI UAC prompt | Per-machine install into Program Files | Expected. Approve only if you intended MSI |
+| NSIS asks for administrator | Unexpected for the current-user installer | Stop and record it; use the matrix notes |
+| App does not draw / blank window | WebView2 runtime missing | Allow the official Microsoft WebView2 bootstrapper |
+| Installer runs but Start Menu missing | Wrong account or failed shortcut step | Reinstall; look under `%LOCALAPPDATA%\Sammy` |
+| Reinstall looks empty | App data was deleted, or a different Windows user | Check `%LOCALAPPDATA%\app.sammy.desktop` |
 
 ## Vault will not unlock
 
@@ -52,7 +62,7 @@ Unlock the vault, open **Settings → Personal knowledge (PKC)**, and use
 | Off | Feature disabled (the default) | Enable only if you want local read-only lookups |
 | Not tested | Paths saved, not verified | Test connection |
 | Python missing | Python is not installed or the path is wrong | Install Python or set the executable under Advanced |
-| Bridge missing | The bridge file moved | Find local defaults, or set the absolute bridge path |
+| Bridge missing | The bridge file moved | Choose the absolute bridge path in Settings |
 | Unavailable | PKC folder missing or the process failed | Confirm the PKC location still exists |
 | Unauthorized | Sammy is not allowed for that source | Do not weaken permissions; use an authorized source |
 | Misconfigured | Source identity or paths incomplete | Save a source identity and valid folders, then retest |

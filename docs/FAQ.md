@@ -37,3 +37,10 @@ tombstoned; both are excluded from active retrieval while audit/history semantic
 are preserved.
 
 **Which Windows versions are supported?** The first release target is Windows 11 x64.
+
+**Why does Windows warn about the installer?** Current builds are unsigned.
+Check the SHA-256 against the owner’s value. Do not disable SmartScreen to
+install. Details: [Windows security warnings](getting-started/windows-security-warnings.md).
+
+**Where does uninstall leave my data?** Program files go away. Vaults stay under
+`%LOCALAPPDATA%\app.sammy.desktop` unless you opt to delete app data.

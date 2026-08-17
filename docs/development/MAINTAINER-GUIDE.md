@@ -29,4 +29,7 @@ track vaults, API keys, recovery codes, model files, installers, or caches.
 
 For releases, follow the reusable checklist rather than relying on a successful
 unit suite alone. An installer, installed-app smoke, documentation validation,
-and honest external-prerequisite record are part of completion.
+and [clean-Windows matrix](../getting-started/windows-clean-install-validation.md)
+are required before calling a public Windows build finished. Signing readiness:
+[Windows code signing](windows-code-signing.md). An honest external-prerequisite
+record is part of completion.

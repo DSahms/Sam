@@ -5,6 +5,10 @@
 Sammy `0.1.0` supports 64-bit Windows 11. You do not need Rust, Node.js, Git, or
 programming tools when installing a prebuilt package.
 
+Related: [Windows security warnings](windows-security-warnings.md) ·
+[Verify hashes and signatures](verify-windows-packages.md) ·
+[Clean-Windows validation](windows-clean-install-validation.md)
+
 ## Before you begin
 
 You need:
@@ -35,8 +39,10 @@ create them beneath `target\release\bundle`.
 
 1. In File Explorer, open the folder containing `Sammy_0.1.0_x64-setup.exe`.
 2. Double-click the file.
-3. Review any Windows publisher warning. Current development builds are unsigned,
-   so verify that the file came from the expected source before continuing.
+3. Review any Windows publisher warning. Current development builds are unsigned.
+   Check the SHA-256 first ([verify packages](verify-windows-packages.md)). See
+   [Windows security warnings](windows-security-warnings.md) for what SmartScreen
+   and UAC mean. Do not turn those protections off.
 4. Complete the setup. It installs Sammy for the signed-in Windows user beneath
    `%LOCALAPPDATA%\Sammy`.
 5. Launch **Sammy** from its installed application entry.
@@ -58,13 +64,39 @@ per-user install is sufficient.
 > Do not disable Smart App Control, Microsoft Defender, or reputation protection
 > globally to run an unsigned build. Verify the source, or wait for a signed build.
 
-## Uninstall and retain data safely
+## Uninstall, residue, and reinstall
 
 Use **Settings → Apps → Installed apps**, find Sammy, and choose **Uninstall**.
-Application data is deliberately separate under
-`%LOCALAPPDATA%\app.sammy.desktop`; uninstalling the executable must not be
-treated as a data-deletion or backup operation.
+
+What that removes:
+
+- Program files (`%LOCALAPPDATA%\Sammy` for NSIS, or `C:\Program Files\Sammy` for MSI)
+- The Start Menu shortcut named Sammy
+- The uninstall registry entry for that installer
+
+What that does **not** remove by default:
+
+- Vaults and settings under `%LOCALAPPDATA%\app.sammy.desktop`
+
+The NSIS uninstaller can offer **Delete app data**. Leave it unchecked unless you
+intentionally want every local vault gone and already have a tested encrypted
+backup. Uninstalling the program is not a backup.
+
+### Reinstall
+
+Install the same version again after uninstall. The vault list should reappear if
+`app.sammy.desktop` was left in place. If you checked delete-app-data, you are
+starting from an empty profile.
+
+### Why two folders
+
+`%LOCALAPPDATA%\Sammy` is “the program.” `%LOCALAPPDATA%\app.sammy.desktop` is
+“your data.” Mixing them would make an uninstall look like a wipe.
 
 Before uninstalling or moving computers, create and test an encrypted backup.
 Do not manually delete the application-data folder unless you intentionally want
 to remove every local vault and already have a verified recovery path.
+
+Public distribution still needs a signed installer and a
+[clean-Windows validation](windows-clean-install-validation.md) pass on a
+machine that is not the development PC. Both remain outstanding.
