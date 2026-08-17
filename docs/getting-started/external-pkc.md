@@ -13,7 +13,8 @@ knowledge to the cloud, copy it into Sammy memory, or write back to PKC.
 2. **Save**, then **Test connection**.
 3. Enable the feature after it shows **Authorized**.
 4. Chat as usual. When personal knowledge was used, open **Used personal knowledge**
-   on the answer.
+   on the answer. If you want Sammy to keep a short statement, choose
+   **Add to Memory Review**. Retrieval itself does not create lasting memory.
 
 Turn it off in the same Settings card at any time. Chat still works if PKC is
 unavailable.

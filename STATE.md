@@ -35,7 +35,7 @@ Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode heal
   key wrap/unwrap, VaultKeyMaterial (passphrase + recovery unwrap), recovery codes.
 - `vault`: per-vault dir (vault.json + vault.db); create/unlock/lock/list/delete;
   multi-vault isolation; SQLCipher encrypted-at-rest (tested); atomic writes.
-- `db`: versioned, forward-only migrations with transactional rollback (v1–v6).
+- `db`: versioned, forward-only migrations with transactional rollback (v1–v7).
 - `audit`: append-only audit_events API (record/list/count_by_category).
 - `lock`: inactivity watchdog (5/15/30/60 min, manual); Windows session-lock
   detection (desktop-name polling via GetUserObjectInformationW); background thread.
@@ -88,6 +88,11 @@ Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode heal
 - `memory`: MemoryCandidate with full provenance; CandidateState
   (pending/approved/rejected/deferred/temporary); propose/approve (promotes to
   knowledge record)/reject/defer/mark_temporary/delete/list.
+- Explicit **Add to Memory Review** from a PKC-grounded chat turn creates a
+  pending candidate with body-free PKC provenance. Retrieval never creates
+  candidates or durable memory.
+- PKC-derived approvals are `local_only`, keep fact/testimony/inference class,
+  and do not rewrite PKC.
 - Conversation content never becomes durable memory without review (§26).
 - Tauri commands wired.
 
@@ -99,7 +104,7 @@ Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode heal
 - Tauri commands wired.
 
 ### Phase 9 — Product validation (in progress)
-- **Forbidden-behavior test suite (§37):** 18 automated tests proving Sammy does
+- **Forbidden-behavior test suite (§37):** 19 automated tests proving Sammy does
   NOT permit private access before unlock, wrong-passphrase success, cross-vault
   access, silent cloud fallback, tombstoned/deleted record retrieval, automatic
   memory approval, rejected memory retrieval, duplicate corpus imports, fake
@@ -107,7 +112,7 @@ Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode heal
   conversation, plaintext secrets in errors/Debug, corrupted backup restore,
   migration without rollback, mock cloud-crossing claims, or candidate records
   in current truth.
-- **End-to-end workflow tests (§36):** 8 integration tests covering new-vault
+- **End-to-end workflow tests (§36):** 9 integration tests covering new-vault
   lifecycle, recovery (backup → restore on new registry via passphrase and
   recovery code), multiple vaults with isolation verification, source-grounded
   answers, corpus package round-trip with reimport-no-duplicates, memory
@@ -163,11 +168,32 @@ Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode heal
   `target\release\bundle\nsis\Sammy_0.1.0_x64-setup.exe`.
 - Diagnostic: `python tools/exercise_pkc_readonly_path.py --mode health|auth|sanitize`.
 
+## PKC Memory Review milestone verified 2026-08-16
+- PKC retrieval still writes **zero** automatic candidates and **zero** durable
+  Sammy memory.
+- Owner can **Add to Memory Review** from a PKC-grounded chat turn. That creates
+  a pending candidate with source id, class (stored knowledge / described /
+  suggestion), and hashes — not corpus bodies.
+- Approve / edit / reject uses the existing Memory Review page. Only approval
+  writes durable memory (`local_only`). Editing the candidate does not rewrite
+  PKC. Inference stays a conclusion, not a silent fact upgrade.
+- Duplicate pending keeps reuse the existing candidate. Conflicting durable
+  text from the same source is surfaced, not auto-picked.
+- Pending PKC-derived candidates survive restart. PKC going offline does not
+  drop them.
+- `cargo test --lib`: 240 passed. e2e: 9. forbidden: 19. Vitest: 15.
+- Windows release rebuild: `target\release\sammy.exe`,
+  `target\release\bundle\msi\Sammy_0.1.0_x64_en-US.msi`,
+  `target\release\bundle\nsis\Sammy_0.1.0_x64-setup.exe`. Packaged UI exposes
+  Settings PKC, Memory Review, and Chat. Vault unlock / Test connection /
+  Chat keep remain a human click-through.
+
 ## Resume point
-PKC daily-use path is in Sammy. Next substantive product work is **not** a
-new architecture: optional explicit memory-review of PKC-grounded turns, then
-the remaining external validations above. PKC, Sammy, StoryKeeper, and the PKC
-Reference Client stay separate.
+PKC-grounded chat can enter Memory Review only by explicit owner action.
+Next substantial product work is **not** a new architecture: owner-facing
+Windows click-through of Chat keep → Memory Review on the packaged app (where
+UIA cannot finish the Chat path), then remaining external validations.
+PKC, Sammy, StoryKeeper, and the PKC Reference Client stay separate.
 
 ## External validation still required
 - Windows code-signing certificate, a live Venice API key, local Tesseract for
@@ -177,6 +203,6 @@ Reference Client stay separate.
 See `EXTERNAL_BLOCKERS.md`. None block the build or tests.
 
 ## Next work
-Owner-facing memory review for PKC-grounded turns (optional, explicit) and
-any remaining external validations (code-signing, clean-machine installer)
-before public distribution. Do not restart PKC architecture.
+Packaged-Windows Chat keep → Memory Review click-through (human or stronger UI
+automation) and remaining external validations (code-signing, clean-machine
+installer) before public distribution. Do not restart PKC architecture.

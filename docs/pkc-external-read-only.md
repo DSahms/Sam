@@ -90,5 +90,11 @@ This is support infrastructure, not the user experience.
 ## Privacy model
 
 PKC evidence is local-only. Cloud turns skip retrieval entirely. Retrieval
-alone never writes Sammy durable memory. Owner-approved memories still go
-through Memory Review, with provenance, like any other candidate.
+alone never writes Sammy durable memory and never creates a Memory Review
+candidate.
+
+To keep something, open **Used personal knowledge** on a grounded answer and
+choose **Add to Memory Review**. That queues a short statement for review. It
+becomes lasting Sammy memory only after you approve it. Editing or approving
+that candidate does not rewrite PKC. Approved PKC-derived memories stay
+`local_only` and follow Sammy’s existing cloud permissions.

@@ -21,5 +21,6 @@ When personal knowledge (PKC) is enabled and the turn stays local, Sammy may
 consult that separate corpus for questions about you. A **Used personal
 knowledge** control appears on those answers so you can see that stored
 knowledge was used, without dumping private source text into the thread.
+If you want Sammy to keep a short statement, use **Add to Memory Review**.
 Cloud routing never consults PKC. See
 [external PKC](../getting-started/external-pkc.md).
