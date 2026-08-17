@@ -65,6 +65,20 @@ pub struct ChatRequest {
     pub routing: RoutingMode,
 }
 
+fn openai_messages(req: &ChatRequest) -> Vec<serde_json::Value> {
+    std::iter::once(serde_json::json!({
+        "role": "system",
+        "content": req.system,
+    }))
+    .chain(req.messages.iter().map(|message| {
+        serde_json::json!({
+            "role": message.role.as_str(),
+            "content": message.content,
+        })
+    }))
+    .collect()
+}
+
 /// A complete chat-completion response (non-streaming).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatResponse {
@@ -435,10 +449,7 @@ impl Provider for KoboldCppProvider {
     fn chat(&self, req: &ChatRequest) -> AppResult<ChatResponse> {
         let body = serde_json::json!({
             "model": req.model,
-            "messages": req.messages.iter().map(|m| serde_json::json!({
-                "role": m.role.as_str(),
-                "content": m.content,
-            })).collect::<Vec<_>>(),
+            "messages": openai_messages(req),
             "max_tokens": req.max_tokens,
         });
         let raw = self.transport.chat(&self.endpoint, &body.to_string())?;
@@ -623,10 +634,7 @@ impl VeniceProvider {
         };
         let body = serde_json::json!({
             "model": model,
-            "messages": req.messages.iter().map(|m| serde_json::json!({
-                "role": m.role.as_str(),
-                "content": m.content,
-            })).collect::<Vec<_>>(),
+            "messages": openai_messages(req),
             "max_tokens": req.max_tokens,
         });
         let raw = self
@@ -695,6 +703,15 @@ mod tests {
             max_tokens: 64,
             routing: RoutingMode::LocalOnly,
         }
+    }
+
+    #[test]
+    fn openai_provider_messages_preserve_the_assembled_system_prompt() {
+        let messages = openai_messages(&req());
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[0]["content"], "be brief");
+        assert_eq!(messages[1]["role"], "user");
+        assert_eq!(messages[1]["content"], "hello");
     }
 
     #[test]
