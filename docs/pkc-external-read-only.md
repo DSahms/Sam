@@ -34,8 +34,9 @@ Sammy consults PKC as consumer `sammy` with purpose `personal_consigliere`.
 
 1. Unlock a vault and open **Settings**.
 2. Open **Personal knowledge (PKC)**.
-3. Choose **Find local defaults** if the usual bridge and PKC folder exist on
-   this machine. Otherwise set the PKC location and source identity.
+3. Choose **Find local defaults**. It fills Python and Sammy's consumer/purpose
+   when those are available. It does not guess a folder from another computer.
+   Set the PKC location and bridge file on this machine if the fields are empty.
 4. **Save**, then **Test connection**. Green **Authorized** means Sammy actually
    verified authorization. It does not dump corpus contents.
 5. Enable the feature only after a successful test, then Save again if needed.

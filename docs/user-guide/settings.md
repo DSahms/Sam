@@ -23,7 +23,9 @@ PKC is a **separate** durable knowledge system. It is not the records in
 
 The Settings card lets you enable or disable read-only access, set the PKC
 location and source identity, discover local defaults, and **Test connection**.
-Consumer identity is `sammy`; purpose is `personal_consigliere`. Evidence never
-leaves this machine: cloud chats skip PKC. A green **Authorized** badge means
-Sammy actually verified the connection, not that a checkbox was ticked.
+**Find local defaults** does not embed another PC's drive letters; choose the
+folders on this computer. Consumer identity is `sammy`; purpose is
+`personal_consigliere`. Evidence never leaves this machine: cloud chats skip PKC.
+A green **Authorized** badge means Sammy actually verified the connection, not
+that a checkbox was ticked.
 

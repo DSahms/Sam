@@ -27,6 +27,9 @@ src-tauri/gen
 *.key
 *.p12
 *.pfx
+*.pvk
+*.spc
+.signing/
 
 # --- Sammy runtime / local data (never commit real vault data) ---
 data/

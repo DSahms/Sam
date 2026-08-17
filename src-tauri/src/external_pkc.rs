@@ -38,10 +38,9 @@ pub const PURPOSE: &str = "personal_consigliere";
 const HEALTH_TIMEOUT_SECS: u64 = 12;
 const RETRIEVAL_TIMEOUT_SECS: u64 = 20;
 
-const DEFAULT_BRIDGE_CANDIDATES: &[&str] =
-    &[r"D:\dev\StoryKeeper\tools\storykeeper_pkc_bridge.py"];
-const DEFAULT_ROOT_CANDIDATES: &[&str] =
-    &[r"F:\personal-knowledge-corpus-scaffold\personal-knowledge-corpus"];
+/// Optional developer override. The value is never a baked-in machine path.
+const ENV_PKC_BRIDGE: &str = "SAMMY_PKC_BRIDGE";
+const ENV_PKC_ROOT: &str = "SAMMY_PKC_ROOT";
 
 /// Conversational payload allowed into the prompt, or `None` to degrade safely.
 pub fn authorized_payload_for_turn(
@@ -265,23 +264,17 @@ pub fn discover_defaults() -> PkcDiscovery {
             "Python was not found on PATH. Install Python or set the executable.".into(),
         );
     }
-    let bridge = DEFAULT_BRIDGE_CANDIDATES
-        .iter()
-        .map(PathBuf::from)
-        .find(|p| p.is_file())
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let bridge = existing_path_from_env(ENV_PKC_BRIDGE, true);
     if bridge.is_empty() {
-        notes.push("No PKC bridge script was found in the usual location.".into());
+        notes.push(
+            "No PKC bridge script was found. Choose the bridge file in Settings.".into(),
+        );
     }
-    let root = DEFAULT_ROOT_CANDIDATES
-        .iter()
-        .map(PathBuf::from)
-        .find(|p| p.is_dir())
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let root = existing_path_from_env(ENV_PKC_ROOT, false);
     if root.is_empty() {
-        notes.push("No PKC root folder was found in the usual location.".into());
+        notes.push(
+            "No PKC root folder was found. Choose the PKC folder in Settings.".into(),
+        );
     }
     let source_id = if root.is_empty() {
         String::new()
@@ -972,6 +965,27 @@ fn python_available(exe: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn existing_path_from_env(name: &str, must_be_file: bool) -> String {
+    let Ok(value) = std::env::var(name) else {
+        return String::new();
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let path = PathBuf::from(trimmed);
+    let ok = if must_be_file {
+        path.is_file()
+    } else {
+        path.is_dir()
+    };
+    if ok {
+        path.to_string_lossy().into_owned()
+    } else {
+        String::new()
+    }
+}
+
 fn discover_python() -> String {
     for candidate in ["python", "py", "python3"] {
         if python_available(candidate) {
@@ -1353,6 +1367,24 @@ mod tests {
         let d = discover_defaults();
         assert_eq!(d.consumer, "sammy");
         assert_eq!(d.purpose, PURPOSE);
+    }
+
+    #[test]
+    fn production_discovery_source_has_no_developer_machine_paths() {
+        let src = include_str!("external_pkc.rs");
+        let production = src
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source before tests");
+        assert!(
+            !production.contains("personal-knowledge-corpus-scaffold"),
+            "do not bake the development PKC path into discovery"
+        );
+        assert!(
+            !production.contains(r"D:\dev\StoryKeeper"),
+            "do not bake the development bridge path into discovery"
+        );
+        assert!(!production.contains("ZCodeProject"));
     }
 
     #[test]
