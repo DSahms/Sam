@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   explainError,
@@ -14,6 +14,10 @@ type Mode =
   | { kind: "creating" }
   | { kind: "unlocking"; vaultId: string }
   | { kind: "recovering"; vaultId: string };
+
+function liveValue(ref: { current: HTMLInputElement | null }, fallback: string): string {
+  return ref.current?.value ?? fallback;
+}
 
 export function VaultView() {
   const [vaults, setVaults] = useState<VaultSummary[]>([]);
@@ -37,6 +41,11 @@ export function VaultView() {
   const [unlockPass, setUnlockPass] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [recoveryNewPass, setRecoveryNewPass] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
+  const passphraseRef = useRef<HTMLInputElement>(null);
+  const unlockPassRef = useRef<HTMLInputElement>(null);
+  const recoveryInputRef = useRef<HTMLInputElement>(null);
+  const recoveryNewPassRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -59,17 +68,15 @@ export function VaultView() {
 
   const handleCreate = useCallback(async () => {
     setError(null);
-    if (passphrase.length < 8) {
+    const typedName = liveValue(nameRef, name).trim();
+    const typedPass = liveValue(passphraseRef, passphrase);
+    if (typedPass.length < 8) {
       setError("Passphrase must be at least 8 characters.");
       return;
     }
     setMode({ kind: "creating" });
     try {
-      const result = await api.vaultCreate(
-        name.trim() || "Personal",
-        template,
-        passphrase,
-      );
+      const result = await api.vaultCreate(typedName || "Personal", template, typedPass);
       setRecoveryCode(result.recovery_code);
       setName("");
       setPassphrase("");
@@ -84,9 +91,14 @@ export function VaultView() {
   const handleUnlock = useCallback(
     async (vaultId: string) => {
       setError(null);
+      const typedPass = liveValue(unlockPassRef, unlockPass);
+      if (typedPass.length === 0) {
+        setError("Passphrase is required.");
+        return;
+      }
       setMode({ kind: "unlocking", vaultId });
       try {
-        await api.vaultUnlock(vaultId, unlockPass);
+        await api.vaultUnlock(vaultId, typedPass);
         setUnlockPass("");
         await refresh();
       } catch (e) {
@@ -103,10 +115,12 @@ export function VaultView() {
       setError(null);
       setMode({ kind: "recovering", vaultId });
       try {
-        if (recoveryNewPass.length < 8) {
+        const typedRecovery = liveValue(recoveryInputRef, recoveryInput);
+        const typedNewPass = liveValue(recoveryNewPassRef, recoveryNewPass);
+        if (typedNewPass.length < 8) {
           throw new Error("New passphrase must be at least 8 characters.");
         }
-        await api.vaultRecoverChangePassphrase(vaultId, recoveryInput, recoveryNewPass);
+        await api.vaultRecoverChangePassphrase(vaultId, typedRecovery, typedNewPass);
         setRecoveryInput("");
         setRecoveryNewPass("");
         await refresh();
@@ -198,12 +212,15 @@ export function VaultView() {
       <section className="card">
         <h2 className="card-title">Create a new vault</h2>
         <div className="form-grid">
-          <label>
+          <label htmlFor="vault-name">
             Name
             <input
+              id="vault-name"
+              ref={nameRef}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onInput={(e) => setName((e.target as HTMLInputElement).value)}
               placeholder="Personal"
             />
           </label>
@@ -220,12 +237,15 @@ export function VaultView() {
               ))}
             </select>
           </label>
-          <label className="span-2">
+          <label className="span-2" htmlFor="master-passphrase">
             Master passphrase (min 8 characters)
             <input
+              id="master-passphrase"
+              ref={passphraseRef}
               type="password"
               value={passphrase}
               onChange={(e) => setPassphrase(e.target.value)}
+              onInput={(e) => setPassphrase((e.target as HTMLInputElement).value)}
               autoComplete="new-password"
             />
           </label>
@@ -257,31 +277,44 @@ export function VaultView() {
                 {!status.unlocked && (
                   <div className="vault-item-actions">
                     <input
+                      ref={unlockPassRef}
                       type="password"
                       placeholder="passphrase"
+                      aria-label="Vault passphrase"
                       value={unlockPass}
                       onChange={(e) => setUnlockPass(e.target.value)}
+                      onInput={(e) => setUnlockPass((e.target as HTMLInputElement).value)}
                       autoComplete="current-password"
                     />
                     <button
                       type="button"
                       className="btn btn-primary"
                       onClick={() => handleUnlock(v.vault_id)}
-                      disabled={mode.kind !== "idle" || unlockPass.length === 0}
+                      disabled={mode.kind !== "idle"}
                     >
                       Unlock
                     </button>
                     <input
+                      ref={recoveryInputRef}
                       type="text"
                       placeholder="recovery code"
+                      aria-label="Recovery code"
                       value={recoveryInput}
                       onChange={(e) => setRecoveryInput(e.target.value)}
+                      onInput={(e) =>
+                        setRecoveryInput((e.target as HTMLInputElement).value)
+                      }
                     />
                     <input
+                      ref={recoveryNewPassRef}
                       type="password"
                       placeholder="new passphrase"
+                      aria-label="New passphrase"
                       value={recoveryNewPass}
                       onChange={(e) => setRecoveryNewPass(e.target.value)}
+                      onInput={(e) =>
+                        setRecoveryNewPass((e.target as HTMLInputElement).value)
+                      }
                       autoComplete="new-password"
                     />
                     <button
