@@ -41,6 +41,9 @@ backups/
 *.sqlite-shm
 *.sqlite-wal
 
+# --- Synthetic PKC click-through fixture (generated copies, not owner corpus) ---
+tools/pkc-clickthrough-fixture/generated/
+
 # --- Editor / OS ---
 .vscode/*
 !.vscode/extensions.json
