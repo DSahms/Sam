@@ -239,19 +239,64 @@ Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode heal
   `target\release\bundle\msi\Sammy_0.1.0_x64_en-US.msi`, and
   `target\release\bundle\nsis\Sammy_0.1.0_x64-setup.exe`.
 
+## Independent clean-Windows installer + code-signing readiness 2026-08-17
+- Starting HEAD was `61c7bf0` (packaged PKC owner validation). Working tree was clean.
+- Phase 1 forensics (before this rebuild) recorded unsigned artifacts:
+  - EXE SHA-256 `766522A21BE318B68CF8B8062D898BCE5EB135A49FDC32ED6ADAC8C8A27B30B8`
+  - MSI SHA-256 `84C6C4887833AD6312D99BDC4EE952EB77409708898C10183C7F442B66434DBE`
+  - NSIS SHA-256 `4DB31B8F2CCE311EEF82126997E8F01EAF2FEA8C76F27627F855CB7468401C15`
+- Tauri config still has no `bundle.windows` signing block. Installers remain
+  NSIS current-user (`%LOCALAPPDATA%\Sammy`) and MSI per-machine
+  (`C:\Program Files\Sammy`). App data stays at
+  `%LOCALAPPDATA%\app.sammy.desktop`.
+- Independent clean VM / Windows Sandbox / spare PC: **UNVALIDATED**. This host
+  is Windows 11 Pro 10.0.26200; Sandbox is absent; no Hyper-V VMs exist. The
+  daily NSIS install under `%LOCALAPPDATA%\Sammy` was not overwritten.
+- Strongest isolated checks actually run:
+  - MSI administrative extract (`msiexec /a`) without installing to Program Files
+  - NSIS payload extract
+  - Launch of extracted / rebuilt `sammy.exe` with a throwaway `LOCALAPPDATA`
+    (window title `Sammy`; created `app.sammy.desktop\vaults`)
+- Portability defect (failure-first, then fixed): production discovery baked
+  `F:\personal-knowledge-corpus-scaffold\...` and `D:\dev\StoryKeeper\...` into
+  `sammy.exe`. Those paths are gone from production code. **Find local defaults**
+  still fills Python and consumer/purpose; the owner chooses folders. Optional
+  env `SAMMY_PKC_ROOT` / `SAMMY_PKC_BRIDGE` can hint discovery. Vendored OpenSSL
+  may still embed `OPENSSLDIR` build-prefix strings; that is not an install-time
+  path lookup.
+- Code signing: readiness plan only. No certificate purchased, no secrets
+  generated, EXE/MSI/NSIS still `NotSigned`.
+- Validation after the portability fix: Rust lib **242 passed**, e2e **9**,
+  forbidden **19**, frontend **18**, windows_packaging **7**; Clippy `-D warnings`,
+  ESLint, and TypeScript pass.
+- Rebuilt Windows artifacts (unsigned):
+  - `target\release\sammy.exe` (11,841,536 bytes)
+    SHA-256 `133545CC30BE3EBB9CA33677B25C064681F40BC9C2E12026D16992A2DD7D7DEF`
+  - `target\release\bundle\msi\Sammy_0.1.0_x64_en-US.msi` (5,554,176 bytes)
+    SHA-256 `A4EA025D82185F8D818C35926B3E15A61F74A7956F9CFE1ED0D35085FFA6F2B0`
+  - `target\release\bundle\nsis\Sammy_0.1.0_x64-setup.exe` (4,086,778 bytes)
+    SHA-256 `17BCB5A99A2B00DCD758D5398B00520F550F6EE01A95851A2B152D4A4F0A66E8`
+
 ## Resume point
-The owner-facing PKC keep path is validated end-to-end in the packaged Windows
-application. PKC-grounded chat can enter Memory Review only by explicit owner
-action, and only approval creates durable Sammy memory.
+Installer forensics, portability checks, signing-readiness documentation, and a
+human clean-Windows procedure exist. Independent clean-Windows install/uninstall
+and production Authenticode signing are still outstanding. PKC-grounded chat and
+Memory Review behavior are unchanged. Canonical PKC remains
+`b0234ccfa52096aaaa5290b2b7253f9ced136853`.
 PKC, Sammy, StoryKeeper, and the PKC Reference Client stay separate.
 
 ## External validation still required
-- Windows code-signing certificate, a live Venice API key, local Tesseract for
-  image OCR, and an independent clean-Windows-machine installer smoke test.
+- A spare Windows 11 PC or VM running
+  `docs/getting-started/windows-clean-install-validation.md`
+- Windows code-signing certificate (see `docs/development/windows-code-signing.md`)
+- A live Venice API key
+- Local Tesseract for image OCR
 
 ## External blockers
 See `EXTERNAL_BLOCKERS.md`. None block the build or tests.
 
 ## Next work
-Independent clean-Windows installer validation and code-signing readiness
-before public distribution. Do not restart PKC architecture.
+Execute the clean-Windows validation procedure on a spare Windows 11 PC or VM
+that does not contain the Sammy source tree. Do not purchase a certificate in
+that milestone unless the owner separately decides to. Do not restart PKC
+architecture.

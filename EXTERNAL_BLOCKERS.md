@@ -19,9 +19,15 @@ work continues. None of these block the build or the test suite.
 ## Code signing
 
 ### Windows code-signing certificate
-- **Blocker:** No code-signing credential is available.
-- **Fallback:** Build and test **unsigned** development packages (MSI/NSIS) per
-  directive §3. Switch to a signed installer when credentials become available.
+- **Blocker:** No code-signing credential is available. `tauri.conf.json` has
+  no `bundle.windows` signing block. EXE, MSI, and NSIS currently verify as
+  `NotSigned`.
+- **Fallback:** Build and test **unsigned** development packages (MSI/NSIS).
+  Readiness plan: `docs/development/windows-code-signing.md`. Do not purchase
+  or enroll a certificate as part of ordinary development.
+- **Still required for public distribution:** a public CA Authenticode cert or
+  a cloud signing service, timestamping, signatures on EXE + both installers +
+  the NSIS uninstaller, and independent `signtool verify` / SHA-256 publication.
 
 ## AI providers
 
@@ -58,7 +64,13 @@ work continues. None of these block the build or the test suite.
 
 ## Independent clean-machine validation
 
-- **Blocker:** Only the current Windows 11 machine was available. NSIS install,
-  launch, exit, and relaunch pass here; MSI creation passes, while MSI install
-  requires administrator elevation. Repeat on a separate clean VM before public
-  distribution.
+- **Blocker:** No Windows Sandbox, spare PC, or existing Hyper-V VM is available
+  on the development host (`WindowsSandbox.exe` missing; `Get-VM` empty). The
+  host already has a daily NSIS install under `%LOCALAPPDATA%\Sammy` that must
+  not be overwritten for a smoke test.
+- **What was done instead (2026-08-17):** installer forensics; MSI administrative
+  extract; NSIS payload extract; launch of the extracted `sammy.exe` with an
+  isolated `LOCALAPPDATA`. That is **not** independent clean-Windows validation.
+- **Fallback:** Human procedure and matrix in
+  `docs/getting-started/windows-clean-install-validation.md`. Remaining install /
+  uninstall / residue / MSI / SmartScreen-on-a-fresh-PC rows stay **UNVALIDATED**.
