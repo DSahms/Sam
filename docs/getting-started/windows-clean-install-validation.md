@@ -31,7 +31,8 @@ independent clean-Windows validation.
 | Independent clean VM / Windows Sandbox / spare PC | **UNVALIDATED** — none of those targets exist on this host |
 | Host forensics of the produced installers | Done on Windows 11 Pro 10.0.26200 |
 | MSI administrative extract (no Program Files install) | Done |
-| NSIS payload extract + isolated `LOCALAPPDATA` launch | Done |
+| NSIS payload extract + isolated `LOCALAPPDATA` launch | Done — window title **Sammy** |
+| Rebuilt `target\release\sammy.exe` isolated-profile launch | Done — window title **Sammy**; see [tooling note](#validation-tooling-noise-not-a-product-failure) |
 | Live NSIS/MSI install on this development PC | **Not performed** — this PC already has a daily Sammy install under `%LOCALAPPDATA%\Sammy` that must not be overwritten |
 
 Do not treat the host checks as a PASS for public distribution.
@@ -70,7 +71,7 @@ source tree.
 | --- | --- | --- | --- | --- |
 | 1 | MSI install | Completes to `C:\Program Files\Sammy` after a UAC prompt | UNVALIDATED (admin extract only; no per-machine install) | UNVALIDATED |
 | 2 | NSIS install | Completes for the current user to `%LOCALAPPDATA%\Sammy` without requiring admin | UNVALIDATED (would overwrite the daily install) | UNVALIDATED |
-| 3 | First launch | Window title `Sammy`; Vaults page; no source-tree path required | PASS — extracted NSIS `sammy.exe` launched with isolated `%LOCALAPPDATA%` | UNVALIDATED |
+| 3 | First launch | Window title `Sammy`; Vaults page; no source-tree path required | PASS — extracted NSIS payload and rebuilt `target\release\sammy.exe`, each with isolated `%LOCALAPPDATA%` | UNVALIDATED |
 | 4 | Vault creation | New vault appears; creation does not auto-unlock | UNVALIDATED on this isolated payload (window only) | UNVALIDATED |
 | 5 | Recovery-code display | One-time code shown; owner must confirm it was saved | UNVALIDATED here; covered by packaged PKC click-through on the host exe | UNVALIDATED |
 | 6 | Lock / unlock | Correct passphrase unlocks; lock returns to the locked Vaults state | UNVALIDATED here; host packaged click-through previously passed | UNVALIDATED |
@@ -100,11 +101,15 @@ source tree.
 - The application executable depends on Windows system / Universal CRT DLLs
   plus the already-installed WebView2 runtime. SQLCipher and OpenSSL are
   statically bundled. Tesseract is **not** shipped.
-- A real portability defect was found and fixed: Settings **Find local defaults**
-  used to compile `F:\personal-knowledge-corpus-scaffold\...` and
-  `D:\dev\StoryKeeper\...` into `sammy.exe`. Those strings are gone from
-  production discovery. The owner still chooses PKC folders; optional env
-  `SAMMY_PKC_ROOT` / `SAMMY_PKC_BRIDGE` can hint discovery without baking paths.
+- A real portability defect was found **failure-first** by
+  `windows_packaging` against the then-current EXE: Settings **Find local
+  defaults** compiled `F:\personal-knowledge-corpus-scaffold\...` and
+  `D:\dev\StoryKeeper\...` into `sammy.exe`. After those constants were removed
+  from production discovery, the Windows production rebuild completed and all
+  **7** packaging tests passed against the rebuilt EXE. The owner still chooses
+  PKC folders; optional env `SAMMY_PKC_ROOT` / `SAMMY_PKC_BRIDGE` can hint
+  discovery without baking paths. Vendored OpenSSL may still embed `OPENSSLDIR`
+  build-prefix strings; that is not an install-time path lookup.
 
 ### Cannot prove here without being dishonest
 
@@ -146,7 +151,7 @@ the program is not the same as deleting vaults.
 ## Isolated-payload procedure used on the development PC
 
 This is the strongest non-destructive check available without touching the
-daily install.
+daily install. It is **not** a clean-machine install.
 
 ```powershell
 # 1. Administrative extract of the MSI (does not install to Program Files)
@@ -158,16 +163,46 @@ msiexec /a "target\release\bundle\msi\Sammy_0.1.0_x64_en-US.msi" /qn `
   "-o$env:TEMP\sammy-nsis-extract" `
   "target\release\bundle\nsis\Sammy_0.1.0_x64-setup.exe"
 
-# 3. Launch the extracted EXE with a throwaway profile
+# 3. Launch with a throwaway profile (PowerShell Start-Process)
+$old = $env:LOCALAPPDATA
 $profile = "$env:TEMP\sammy-payload-isolation"
 New-Item -ItemType Directory -Force -Path $profile | Out-Null
 $env:LOCALAPPDATA = $profile
-Start-Process "$env:TEMP\sammy-nsis-extract\sammy.exe"
+$p = Start-Process "$env:TEMP\sammy-nsis-extract\sammy.exe" -PassThru
+# After the window titled Sammy appears:
+# Stop-Process -Id $p.Id -Force
+$env:LOCALAPPDATA = $old
 ```
 
-Success: a window titled **Sammy** appears, and
+The same `LOCALAPPDATA` redirect was also used on the rebuilt
+`target\release\sammy.exe`. Success: a window titled **Sammy** appears, and
 `$profile\app.sammy.desktop\vaults` is created. Stop the process when finished.
-Do not point `LOCALAPPDATA` at your real profile while doing this.
+Restore `LOCALAPPDATA` to `%USERPROFILE%\AppData\Local`. Do not point it at the
+real profile while the test process is running.
+
+### What this isolation method does and does not prove
+
+It **does** prove the packaged EXE can start on this Windows 11 host without
+reading the Sammy source tree or the daily `%LOCALAPPDATA%\Sammy` install, and
+that it writes vaults under the redirected profile’s `app.sammy.desktop`.
+
+It **does not** prove installer execution, Start Menu shortcuts, UAC, MSI
+per-machine layout, uninstall, residue, SmartScreen on a machine that has never
+seen the file, or that WebView2 would download on a PC that lacks it. This host
+already has WebView2. The source tree still exists on disk even though the
+process was not started from it.
+
+Vault create / recovery-code / lock-unlock in *this* throwaway profile were
+**not** exercised. Those owner flows were previously proven on the host
+packaged EXE during the PKC click-through, which is a different profile.
+
+### Validation tooling noise (not a product failure)
+
+One attempt used `cmd /c` with `start /wait /b` and broken quoting. That job
+hung and was killed. Sammy itself did not fail to launch. Treat that exit as
+script noise. The working method is PowerShell `Start-Process` after setting
+`$env:LOCALAPPDATA`. After the successful launch, no Sammy process remained
+and the real user `LOCALAPPDATA` was restored.
 
 ## Why the inner `sammy.exe` hash may differ from `target\release\sammy.exe`
 

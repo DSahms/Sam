@@ -255,15 +255,27 @@ Diagnostic (not the UX): `python tools/exercise_pkc_readonly_path.py --mode heal
 - Strongest isolated checks actually run:
   - MSI administrative extract (`msiexec /a`) without installing to Program Files
   - NSIS payload extract
-  - Launch of extracted / rebuilt `sammy.exe` with a throwaway `LOCALAPPDATA`
+  - Launch of extracted NSIS `sammy.exe` with a throwaway `LOCALAPPDATA`
     (window title `Sammy`; created `app.sammy.desktop\vaults`)
-- Portability defect (failure-first, then fixed): production discovery baked
+  - Second launch of the **rebuilt** `target\release\sammy.exe` with another
+    throwaway `LOCALAPPDATA` (window title `Sammy`; created
+    `app.sammy.desktop\vaults`). A first `cmd /c start /wait` quoting attempt
+    hung and was killed; that was validation-script noise, not a Sammy launch
+    failure. After the successful launch, no Sammy process remained and
+    `LOCALAPPDATA` was restored to the real user profile.
+  - Isolation limit: this host still has WebView2, the source tree, and the
+    daily install. It is not a clean PC. Installer/UAC/uninstall/SmartScreen
+    rows stay **UNVALIDATED**.
+- Portability defect (failure-first, then fixed): `windows_packaging` first
+  **failed** because production discovery baked
   `F:\personal-knowledge-corpus-scaffold\...` and `D:\dev\StoryKeeper\...` into
-  `sammy.exe`. Those paths are gone from production code. **Find local defaults**
-  still fills Python and consumer/purpose; the owner chooses folders. Optional
-  env `SAMMY_PKC_ROOT` / `SAMMY_PKC_BRIDGE` can hint discovery. Vendored OpenSSL
-  may still embed `OPENSSLDIR` build-prefix strings; that is not an install-time
-  path lookup.
+  `sammy.exe`. After the constants were removed, the production rebuild
+  completed and packaging tests **passed** (7/7) against the rebuilt EXE.
+  **Find local defaults** still fills Python and consumer/purpose; the owner
+  chooses folders. Optional env `SAMMY_PKC_ROOT` / `SAMMY_PKC_BRIDGE` can hint
+  discovery. Vendored OpenSSL may still embed `OPENSSLDIR` build-prefix
+  strings; that is not an install-time path lookup. Do not reopen the `F:\`
+  path as an active defect unless a new scan fails.
 - Code signing: readiness plan only. No certificate purchased, no secrets
   generated, EXE/MSI/NSIS still `NotSigned`.
 - Validation after the portability fix: Rust lib **242 passed**, e2e **9**,

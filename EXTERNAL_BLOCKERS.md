@@ -69,8 +69,10 @@ work continues. None of these block the build or the test suite.
   host already has a daily NSIS install under `%LOCALAPPDATA%\Sammy` that must
   not be overwritten for a smoke test.
 - **What was done instead (2026-08-17):** installer forensics; MSI administrative
-  extract; NSIS payload extract; launch of the extracted `sammy.exe` with an
-  isolated `LOCALAPPDATA`. That is **not** independent clean-Windows validation.
+  extract; NSIS payload extract; isolated-profile launch of the extracted NSIS
+  payload **and** of the rebuilt `sammy.exe` (window title **Sammy**). A hung
+  `cmd /wait` quoting command was tooling noise, not a product failure. That is
+  **not** independent clean-Windows validation.
 - **Fallback:** Human procedure and matrix in
   `docs/getting-started/windows-clean-install-validation.md`. Remaining install /
   uninstall / residue / MSI / SmartScreen-on-a-fresh-PC rows stay **UNVALIDATED**.
