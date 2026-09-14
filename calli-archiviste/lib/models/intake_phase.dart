@@ -1,6 +1,6 @@
 /// Represents the phase of an intake interview.
-/// Unlike StoryKeeper's LifeChapter (memoir-specific), this is generic
-/// and can be extended by the application layer (Sam) as needed.
+/// Generic by design: the application layer (Sam) may extend or map
+/// phases for product-specific flows without changing this contract.
 enum IntakePhase {
   /// Initial artifact identification and context gathering
   artifactIdentification,

@@ -132,6 +132,9 @@ class PKCInterviewEvidence {
 
 **Calli does not:**
 - Manage file storage paths
+- Compute hashes (delegates to Media Archive)
+- Store artifact bytes in Hive or PKC
+
 ---
 
 ## Migration Boundary
@@ -209,10 +212,14 @@ class PKCInterviewEvidence {
 
 ---
 
-Implementation status: NOT STARTED
-Plan status: READY FOR IMPLEMENTATION REVIEW
-- Compute hashes (delegates to Media Archive)
-- Store artifact bytes in Hive or PKC
+Implementation status: PARTIAL (2026-09-14) — package scaffold, models, services,
+and the PKC DTO bridge exist in `calli-archiviste/`. The interview engine and
+intake screens are NOT yet extracted from the donor. The barrel file previously
+exported `services/interview_engine.dart` and `models/photo_metadata.dart` which
+did not exist; `photo_metadata` export was removed (artifact model is
+`artifact_metadata.dart`) and `services/interview_engine.dart` now provides the
+Calli-native interface plus a deterministic stub pending donor extraction.
+Plan status: READY FOR EXTRACTION REVIEW
 
 ---
 
@@ -224,9 +231,19 @@ Plan status: READY FOR IMPLEMENTATION REVIEW
 | `ui_state_box` | Last screen, theme, window size, interview scroll position, auto-interview settings | **NO** — local ephemeral |
 
 **Migration rule:** Only `knowledge_box` is submitted to PKC. `ui_state_box` is deleted on uninstall or cleared per-session.
-| Hive boxes: `sessions`, `messages`, `media` | **Split** → `knowledge_box` (PKC-bound) + `ui_state_box` (local only) |
-| Constants: `constants.dart`, `chapter_catalog.dart`, `recovery_constants.dart` | **Remove** — not Calli's concern |
-| Prompts: `interviewer_system.txt`, `narrative_*.txt` | **Remove** — narrative prompts are Writer; keep only intake prompts if any |
-| Sam Application | `D:\dev\StoryKeeper-Local-Writer` (selected services) | `Sammy/apps/sam/` |
-| Media Archive | Not yet implemented | `Sammy/media-archive/` |
-| Shared Utilities | `D:\dev\StoryKeeper-Local-Writer\lib\utils.dart` (minimal) | `Sammy/shared/` (only if cross-component contract exists) |
+
+---
+
+## Source Map Addendum (recovered rows)
+
+The following rows were misplaced at the end of the Storage Boundary table by
+an earlier editing pass and are restored here as a proper source map:
+
+| Component | Source | Target |
+|-----------|--------|--------|
+| Hive boxes: `sessions`, `messages`, `media` | Local-Writer | **Split** → `knowledge_box` (PKC-bound) + `ui_state_box` (local only) |
+| Constants: `constants.dart`, `chapter_catalog.dart`, `recovery_constants.dart` | Local-Writer | **Remove** — not Calli's concern |
+| Prompts: `interviewer_system.txt`, `narrative_*.txt` | Local-Writer | **Remove** — narrative prompts are Writer; keep only intake prompts if any |
+| Sam Application | `D:\dev\StoryKeeper-Local-Writer` (selected services) | `apps/sam/` |
+| Media Archive | Not yet implemented | `media-archive/` |
+| Shared Utilities | `D:\dev\StoryKeeper-Local-Writer\lib\utils.dart` (minimal) | `shared/` (only if cross-component contract exists) |
