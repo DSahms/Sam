@@ -54,3 +54,10 @@ tools/pkc-clickthrough-fixture/generated/
 .idea
 .DS_Store
 Thumbs.db
+
+# --- Calli-Archiviste (Flutter) build artifacts ---
+calli-archiviste/.dart_tool/
+calli-archiviste/.flutter-plugins-dependencies
+
+# --- Preserve empty architecture directories ---
+!.gitkeep

@@ -1,0 +1,33 @@
+name: calli_archiviste
+description: "Calli Archiviste — Personal Knowledge Intake Engine."
+publish_to: 'none'
+
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  provider: ^6.0.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  http: ^1.1.0
+  flutter_dotenv: ^5.1.0
+  uuid: ^4.0.0
+  path_provider: ^2.1.0
+  intl: ^0.19.0
+  image_picker: ^1.0.0
+  path: ^1.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
