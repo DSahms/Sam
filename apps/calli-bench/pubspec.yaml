@@ -1,0 +1,21 @@
+name: calli_bench
+description: >-
+  Calli Bench - minimal Windows desktop test bench that runs the real
+  Calli Archiviste interview engine against a local KoboldCpp server.
+  Development tool, not the product UI.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  calli_archiviste:
+    path: ../../calli-archiviste
+  hive: ^2.2.3
+  path_provider: ^2.1.0
+
+flutter:
+  uses-material-design: true

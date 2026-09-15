@@ -160,6 +160,15 @@ class PKCInterviewEvidence {
 | | | `book_config.dart` |
 | | | Narrative feature wiring (providers/compilers) — NOTE: narrative prompt TEXT was handed over 2026-09-15 and is vendored in `calli-archiviste/assets/prompts/` for the future memoir-assembly path |
 
+Update 2026-09-15 (Stage 4 landed): the memoir-assembly consumer now lives in
+Calli per the owner-approved roadmap (Stage 4 = memoir output).
+`narrative_service.dart` + `long_form_narrative_compiler.dart` were extracted
+into `calli-archiviste/lib/services/` and consume the vendored narrative
+prompts; the storage-side narrative cache (`sourceSignature`) now has its
+producer (`NarrativeService.narrativeSignatureForSessions`). The Writer-only
+exclusions for book/PDF/print features (`book_formatter.dart`,
+`print_service.dart`, book/narrative UI providers) remain unchanged.
+
 ---
 
 ## Migration Anti-Patterns
@@ -221,12 +230,15 @@ evidence model was healed from a corrupted copy and now carries Calli's own
 wire identity). Donor prompt assets (`assets/prompts/*.txt`, 6 files) were
 handed over 2026-09-15 and are now vendored + declared in pubspec.yaml: the
 engine and compressor load the REAL prompts (interviewer, follow_up,
-context_summary); the three narrative_* prompts are staged as assets for the
-memoir-assembly path (no Dart consumer yet — storage and model config already
-exist). Fallback placeholder strings remain only as a degraded-mode safety
-net that logs loudly on asset-load failure. Still pending: host LLM wiring
-and `flutter analyze` on the owner's machine.
-Plan status: PROMPTS LANDED (2026-09-15) — awaiting owner-side flutter analyze
+context_summary); the three narrative_* prompts are consumed by the Stage 4
+memoir services (narrative_service.dart + long_form_narrative_compiler.dart).
+Fallback placeholder strings remain only as a degraded-mode safety
+net that logs loudly on asset-load failure. Still pending: Sam host
+integration (Stage 5). Owner-side `flutter analyze` has run clean
+(0 issues) through Stages 0-4.
+Plan status: STAGE 4 LANDED (2026-09-15) — narrative prompts have their
+consumer; memoir generation is live at the service layer; first bench
+(`apps/calli-bench/`) delivered in Stage 5-a to run the engine on KoboldCpp.
 
 ---
 

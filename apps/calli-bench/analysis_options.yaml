@@ -1,0 +1,3 @@
+# Calli Bench keeps the same analyzer surface as the calli_archiviste
+# package (which ships no analysis_options.yaml), so `flutter analyze`
+# reports the same baseline in both places.

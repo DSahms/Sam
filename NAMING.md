@@ -16,6 +16,7 @@ Canonical names were confirmed by the owner on 2026-09-14.
 |---|---|---|
 | **Sam** | The personal assistant product. Default persona name. | `src/` + `src-tauri/` at repo root (moves to `apps/sam/` eventually) |
 | **Calli Archiviste** | The personal knowledge intake engine — "the librarian". Accepts artifacts, interviews the owner, structures knowledge, submits to PKC. | `calli-archiviste/` (Flutter package, partially extracted) |
+| **Calli Bench** | Minimal Windows desktop test bench running the real interview engine against KoboldCpp. Development tool only, never the product UI. | `apps/calli-bench/` (Stage 5-a) |
 | **PKC** (Personal Knowledge Corpus) | The authoritative personal knowledge system — "the Dewey Decimal System". Software only; the owner's personal corpus data NEVER enters Git. | External repo (`F:\personal-knowledge-corpus-scaffold\personal-knowledge-corpus`); consolidates into `pkc/` eventually |
 | **Media Archive** | Preservation layer for original artifacts (photos, letters, recordings). Evidence, never rewritten into knowledge. | `media-archive/` (not started) |
 | **shared/** | Explicit cross-component contracts only. Not a dumping ground. | `shared/` (not started) |
