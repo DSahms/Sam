@@ -11,6 +11,8 @@ export 'services/llm_service.dart';
 export 'services/kobold_local_service.dart';
 export 'services/session_storage.dart';
 export 'services/context_compressor.dart';
+export 'services/narrative_service.dart';
+export 'services/long_form_narrative_compiler.dart';
 export 'services/grounding_policy.dart';
 export 'services/pkc_bridge.dart';
 export 'models/interview_session.dart';
