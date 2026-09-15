@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:calli_archiviste/models/message.dart';
+import 'package:calli_archiviste/services/llm_service.dart';
 
 /// Context compressor for summarizing interview sessions
 /// Generates concise summaries to serve as context for future sessions
@@ -20,7 +21,14 @@ class ContextCompressor {
       _summarySystemPrompt =
           await rootBundle.loadString('assets/prompts/context_summary_system.txt');
     } catch (e) {
-      throw Exception('Failed to load context summary prompt: $e');
+      // DEGRADED-MODE SAFETY NET (2026-09-15): the real donor asset now ships
+      // in assets/prompts/context_summary_system.txt and is declared in
+      // pubspec.yaml. This only triggers on runtime asset-load failure.
+      debugPrint(
+        'ContextCompressor.initialize: prompt asset load FAILED, '
+        'using placeholder fallback: $e',
+      );
+      _summarySystemPrompt = 'You summarize life-story interview conversations into concise factual notes for future context. Use only what was actually said; do not invent details.';
     }
   }
 
@@ -113,15 +121,4 @@ class ContextCompressor {
 
     return buffer.toString();
   }
-}
-
-/// Abstract interface for LLM service
-/// This allows Calli to use any LLM provider without coupling to a specific implementation
-abstract class LlmService {
-  Future<String> sendMessage({
-    required String systemPrompt,
-    required List<Map<String, String>> messages,
-    required int maxTokens,
-    String? model,
-  });
 }

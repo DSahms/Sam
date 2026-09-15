@@ -158,7 +158,7 @@ class PKCInterviewEvidence {
 | | | `local_writer_settings*.dart` |
 | | | `recovery_constants.dart` |
 | | | `book_config.dart` |
-| | | All narrative prompts |
+| | | Narrative feature wiring (providers/compilers) — NOTE: narrative prompt TEXT was handed over 2026-09-15 and is vendored in `calli-archiviste/assets/prompts/` for the future memoir-assembly path |
 
 ---
 
@@ -212,14 +212,21 @@ class PKCInterviewEvidence {
 
 ---
 
-Implementation status: PARTIAL (2026-09-14) — package scaffold, models, services,
-and the PKC DTO bridge exist in `calli-archiviste/`. The interview engine and
-intake screens are NOT yet extracted from the donor. The barrel file previously
-exported `services/interview_engine.dart` and `models/photo_metadata.dart` which
-did not exist; `photo_metadata` export was removed (artifact model is
-`artifact_metadata.dart`) and `services/interview_engine.dart` now provides the
-Calli-native interface plus a deterministic stub pending donor extraction.
-Plan status: READY FOR EXTRACTION REVIEW
+Implementation status: ENGINE EXTRACTED (2026-09-15) — the authoritative donor
+InterviewEngine and its dependency world (chapter catalog, family/photo models,
+LLM service stack, PKC bridge config, InterviewSession storage) are extracted
+into `calli-archiviste/` with imports remapped; the Calli scaffold is preserved
+alongside (IntakeSession/IntakePhase/ArtifactMetadata + IntakeStorage; the
+evidence model was healed from a corrupted copy and now carries Calli's own
+wire identity). Donor prompt assets (`assets/prompts/*.txt`, 6 files) were
+handed over 2026-09-15 and are now vendored + declared in pubspec.yaml: the
+engine and compressor load the REAL prompts (interviewer, follow_up,
+context_summary); the three narrative_* prompts are staged as assets for the
+memoir-assembly path (no Dart consumer yet — storage and model config already
+exist). Fallback placeholder strings remain only as a degraded-mode safety
+net that logs loudly on asset-load failure. Still pending: host LLM wiring
+and `flutter analyze` on the owner's machine.
+Plan status: PROMPTS LANDED (2026-09-15) — awaiting owner-side flutter analyze
 
 ---
 
@@ -243,7 +250,7 @@ an earlier editing pass and are restored here as a proper source map:
 |-----------|--------|--------|
 | Hive boxes: `sessions`, `messages`, `media` | Local-Writer | **Split** → `knowledge_box` (PKC-bound) + `ui_state_box` (local only) |
 | Constants: `constants.dart`, `chapter_catalog.dart`, `recovery_constants.dart` | Local-Writer | **Remove** — not Calli's concern |
-| Prompts: `interviewer_system.txt`, `narrative_*.txt` | Local-Writer | **Remove** — narrative prompts are Writer; keep only intake prompts if any |
+| Prompts: `interviewer_system.txt`, `narrative_*.txt` | Local-Writer | **Vendored** in `calli-archiviste/assets/prompts/` (2026-09-15) — interview + context prompts are consumed by the extracted engine; narrative prompts staged for memoir assembly |
 | Sam Application | `D:\dev\StoryKeeper-Local-Writer` (selected services) | `apps/sam/` |
 | Media Archive | Not yet implemented | `media-archive/` |
 | Shared Utilities | `D:\dev\StoryKeeper-Local-Writer\lib\utils.dart` (minimal) | `shared/` (only if cross-component contract exists) |

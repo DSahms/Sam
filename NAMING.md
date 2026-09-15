@@ -58,6 +58,14 @@ identities, or runtime constants:
      evidence.
    - `sammy.exe`, `sammy-cli`, `Sammy_0.1.0_*.msi/.exe` installer artifacts —
      rename in a dedicated release milestone, not in a docs pass.
+   - `storykeeper_pkc_bridge.py` — filename of the external PKC gateway script
+     that `PKCConfig.bridgeScript` resolves by default. Renaming it breaks the
+     bridge path contract and the gateway emitter; rename only together with
+     the gateway itself (same rule as the RULE-STORYKEEPER marker above).
+   - Donor-provenance comments in `calli-archiviste/` — extracted donor code
+     carries "Donor behavior note:" comments explaining why behavior is the
+     way it is. These are documentation of contract behavior, not identity
+     residue; they may be reworded only when the behavior note itself changes.
 3. **Git history** — history is never rewritten to purge names.
 
 ---

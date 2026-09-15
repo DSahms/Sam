@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:calli_archiviste/config/pkc_config.dart';
 import 'package:calli_archiviste/models/pkc_interview_evidence.dart';
 
 abstract interface class PKCInterviewBridge {
@@ -87,19 +88,15 @@ class LocalProcessPKCInterviewBridge implements PKCInterviewBridge {
     PKCBridgeProcessRunner processRunner = const SystemPKCBridgeProcessRunner(),
   }) : _processRunner = processRunner;
 
-  factory LocalProcessPKCInterviewBridge.fromConfig({
-    required bool enabled,
-    required String pythonExecutable,
-    required String bridgeScript,
-    String? pkcRoot,
-    Duration timeout = const Duration(seconds: 20),
-  }) =>
+  /// Donor-compatible zero-argument factory: reads the global PKCConfig
+  /// (dotenv-driven; disabled unless deliberately enabled).
+  factory LocalProcessPKCInterviewBridge.fromConfig() =>
       LocalProcessPKCInterviewBridge(
-        enabled: enabled,
-        pythonExecutable: pythonExecutable,
-        bridgeScript: bridgeScript,
-        pkcRoot: pkcRoot,
-        timeout: timeout,
+        enabled: PKCConfig.enabled,
+        pythonExecutable: PKCConfig.pythonExecutable,
+        bridgeScript: PKCConfig.bridgeScript,
+        pkcRoot: PKCConfig.pkcRoot,
+        timeout: PKCConfig.timeout,
       );
 
   final bool enabled;

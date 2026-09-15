@@ -40,21 +40,21 @@ class PKCInterviewRequest {
   final List<String> sourceHandles;
 
   Map<String, Object?> toJson() => {
-        'bridge_version': bridgeVersion,
-        'request_id': requestId,
-        'operation': operation.wireValue,
-        'question': question,
-        'chapter_context': chapterContext,
-        'consumer_application': consumerApplication,
-        'recipient_class': recipientClass,
-        'realm': realm,
-        'purpose': purpose,
-        'disclosure_mode': disclosureMode,
-        'requested_content_level': requestedContentLevel,
-        'consent_state': consentState,
-        if (sourceId != null) 'source_id': sourceId,
-        if (sourceHandles.isNotEmpty) 'source_handles': sourceHandles,
-      };
+    'bridge_version': bridgeVersion,
+    'request_id': requestId,
+    'operation': operation.wireValue,
+    'question': question,
+    'chapter_context': chapterContext,
+    'consumer_application': consumerApplication,
+    'recipient_class': recipientClass,
+    'realm': realm,
+    'purpose': purpose,
+    'disclosure_mode': disclosureMode,
+    'requested_content_level': requestedContentLevel,
+    'consent_state': consentState,
+    if (sourceId != null) 'source_id': sourceId,
+    if (sourceHandles.isNotEmpty) 'source_handles': sourceHandles,
+  };
 }
 
 class PKCSourceRelationship {
@@ -66,6 +66,46 @@ class PKCSourceRelationship {
   factory PKCSourceRelationship.fromJson(Map<String, dynamic> json) =>
       PKCSourceRelationship(
         type: json['type'] as String? ?? '',
+        target: json['target'] as String? ?? '',
+      );
+}
+
+class PKCEvidenceSource {
+  const PKCEvidenceSource({
+    required this.id,
+    required this.title,
+    required this.sourceKind,
+    required this.bodyIncluded,
+    required this.relationships,
+  });
+
+  final String id;
+  final String? title;
+  final String? sourceKind;
+  final bool bodyIncluded;
+  final List<PKCSourceRelationship> relationships;
+
+  factory PKCEvidenceSource.fromJson(Map<String, dynamic> json) {
+    final relationships = json['relationships'];
+    return PKCEvidenceSource(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String?,
+      sourceKind: json['source_kind'] as String?,
+      bodyIncluded: json['body_included'] as bool? ?? false,
+      relationships: relationships is List
+          ? relationships
+                .whereType<Map>()
+                .map(
+                  (item) => PKCSourceRelationship.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
+                .toList()
+          : const [],
+    );
+  }
+}
+
 class PKCInterviewEvidence {
   const PKCInterviewEvidence({
     required this.ok,
@@ -96,9 +136,9 @@ class PKCInterviewEvidence {
   final bool protectedContentMaterialized;
 
   String get conversationalPayload => [
-        naturalAnswer,
-        conversationalContext,
-      ].where((value) => value.isNotEmpty).join('\n');
+    naturalAnswer,
+    conversationalContext,
+  ].where((value) => value.isNotEmpty).join('\n');
 
   factory PKCInterviewEvidence.unavailable(String safeReason) =>
       PKCInterviewEvidence(
@@ -138,61 +178,23 @@ class PKCInterviewEvidence {
           : const [],
       sources: sources is List
           ? sources
-              .whereType<Map>()
-              .map(
-                (item) => PKCEvidenceSource.fromJson(
-                  Map<String, dynamic>.from(item),
-                ),
-              )
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (item) => PKCEvidenceSource.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
+                .toList()
           : const [],
       withheld: payload['withheld'] as bool? ?? true,
       safeReason: payload['safe_reason'] as String?,
       authorized: payload['authorized'] as bool? ?? false,
-      canonicalHashVerified: payload['canonical_hash_verified'] as bool? ?? false,
+      canonicalHashVerified:
+          payload['canonical_hash_verified'] as bool? ?? false,
       protectedContentMaterialized:
           payload['protected_content_materialized'] as bool? ?? false,
     );
   }
-
-  Map<String, dynamic> toJson() => {
-        'ok': ok,
-        'available': available,
-        'naturalAnswer': naturalAnswer,
-        'conversationalContext': conversationalContext,
-        'supportStatus': supportStatus,
-        'sourceHandles': sourceHandles,
-        'sources': sources.map((s) => s.toJson()).toList(),
-        'withheld': withheld,
-        'safeReason': safeReason,
-        'authorized': authorized,
-        'canonicalHashVerified': canonicalHashVerized,
-        'protectedContentMaterialized': protectedContentMaterialized,
-      };
-
-  factory PKCInterviewEvidence.fromJson(Map<String, dynamic> json) =>
-      PKCInterviewEvidence(
-        ok: json['ok'] as bool? ?? false,
-        available: json['available'] as bool? ?? false,
-        naturalAnswer: json['naturalAnswer'] as String? ?? '',
-        conversationalContext: json['conversationalContext'] as String? ?? '',
-        supportStatus: json['supportStatus'] as String? ?? 'Unknown',
-        sourceHandles: (json['sourceHandles'] as List<dynamic>?)
-                ?.cast<String>() ??
-            const [],
-        sources: (json['sources'] as List<dynamic>?)
-                ?.map((e) => PKCEvidenceSource.fromJson(
-                      Map<String, dynamic>.from(e),
-                    ))
-                .toList() ??
-            const [],
-        withheld: json['withheld'] as bool? ?? true,
-        safeReason: json['safeReason'] as String?,
-        authorized: json['authorized'] as bool? ?? false,
-        canonicalHashVerified: json['canonicalHashVerified'] as bool? ?? false,
-        protectedContentMaterialized:
-            json['protectedContentMaterialized'] as bool? ?? false,
-      );
 }
 
 class PKCBackedFollowUpResult {
@@ -209,51 +211,4 @@ class PKCBackedFollowUpResult {
   final bool usedPkcContext;
   final bool localModelAttempted;
   final bool usedFallback;
-}
-        target: json['target'] as String? ?? '',
-      );
-}
-
-class PKCEvidenceSource {
-  const PKCEvidenceSource({
-    required this.id,
-    required this.title,
-    required this.sourceKind,
-    required this.bodyIncluded,
-    required this.relationships,
-  });
-
-  final String id;
-  final String? title;
-  final String? sourceKind;
-  final bool bodyIncluded;
-  final List<PKCSourceRelationship> relationships;
-
-  factory PKCEvidenceSource.fromJson(Map<String, dynamic> json) {
-    final relationships = json['relationships'];
-    return PKCEvidenceSource(
-      id: json['id'] as String? ?? '',
-      title: json['title'] as String?,
-      sourceKind: json['source_kind'] as String?,
-      bodyIncluded: json['body_included'] as bool? ?? false,
-      relationships: relationships is List
-          ? relationships
-              .whereType<Map>()
-              .map(
-                (item) => PKCSourceRelationship.fromJson(
-                  Map<String, dynamic>.from(item),
-                ),
-              )
-              .toList()
-          : const [],
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'source_kind': sourceKind,
-        'body_included': bodyIncluded,
-        'relationships': relationships.map((r) => r.toJson()).toList(),
-      };
 }

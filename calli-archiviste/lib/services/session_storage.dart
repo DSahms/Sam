@@ -1,171 +1,381 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:calli_archiviste/models/session.dart';
-import 'package:calli_archiviste/models/artifact_metadata.dart';
-import 'package:calli_archiviste/models/pkc_interview_evidence.dart';
+import 'package:calli_archiviste/config/chapter_catalog.dart';
+import 'package:calli_archiviste/config/constants.dart';
+import 'package:calli_archiviste/models/chapter.dart';
+import 'package:calli_archiviste/models/family_member.dart';
+import 'package:calli_archiviste/models/photo_metadata.dart';
+import 'package:calli_archiviste/models/interview_session.dart';
 import 'package:calli_archiviste/services/context_compressor.dart';
 
-/// Service for persisting intake sessions and artifact metadata using Hive
-/// 
-/// Storage is split into two boxes:
-/// - knowledge_box: Contains PKC-bound knowledge (sessions, evidence, artifact metadata)
-/// - ui_state_box: Contains ephemeral UI state (last screen, theme, scroll position)
+/// Service for persisting sessions and chapter metadata using Hive
 class SessionStorage {
-  static const String _knowledgeBox = 'knowledge_box';
-  static const String _uiStateBox = 'ui_state_box';
+  static const String _sessionsBox = 'sessions';
+  static const String _chaptersBox = 'chapters';
+  static const String _familyBox = 'family';
+  static const String _photosBox = 'photos';
 
-  late Box<String> _knowledgeBoxInstance;
-  late Box<String> _uiStateBoxInstance;
+  static const String _profileBox = 'profile';
+  static const String _narrativesBox = 'narratives';
+  static const String _bookConfigBox = 'bookConfig';
 
-  /// Initialize Hive and open boxes
+  late Box<String> _sessionBox;
+  late Box<String> _chapterBox;
+  late Box<String> _familyBoxInstance;
+  late Box<String> _photosBoxInstance;
+  late Box<String> _profileBoxInstance;
+  late Box<String> _narrativesBoxInstance;
+  late Box<String> _bookConfigBoxInstance;
+
+  /// Initialize Hive and open all boxes
   Future<void> initialize() async {
-    _knowledgeBoxInstance = await Hive.openBox<String>(_knowledgeBox);
-    _uiStateBoxInstance = await Hive.openBox<String>(_uiStateBox);
+    _sessionBox = await Hive.openBox<String>(_sessionsBox);
+    _chapterBox = await Hive.openBox<String>(_chaptersBox);
+    _familyBoxInstance = await Hive.openBox<String>(_familyBox);
+    _photosBoxInstance = await Hive.openBox<String>(_photosBox);
+    _profileBoxInstance = await Hive.openBox<String>(_profileBox);
+    _narrativesBoxInstance = await Hive.openBox<String>(_narrativesBox);
+    _bookConfigBoxInstance = await Hive.openBox<String>(_bookConfigBox);
   }
 
-  Box<String> get knowledgeBox => _knowledgeBoxInstance;
-  Box<String> get uiStateBox => _uiStateBoxInstance;
+  Box<String> _openBox(String name) => Hive.box<String>(name);
 
-  // ============ KNOWLEDGE BOX (PKC-bound) ============
+  Box<String> get _familyMemberBox => Hive.box<String>(_familyBox);
 
-  /// Save an intake session (knowledge)
-  Future<void> saveSession(IntakeSession session) async {
-    await _knowledgeBoxInstance.put(
-      session.id,
-      jsonEncode(session.toJson()),
-    );
+  /// Save a family member.
+  Future<void> saveFamilyMember(FamilyMember member) async {
+    await _familyMemberBox.put(
+      member.id, jsonEncode(member.toJson()));
+  }
+
+  /// Get all family members.
+  Future<List<FamilyMember>> getAllFamilyMembers() async {
+    final members = <FamilyMember>[];
+    for (final key in _familyMemberBox.keys) {
+      final json = _familyMemberBox.get(key);
+      if (json != null) {
+        members.add(FamilyMember.fromJson(
+          jsonDecode(json) as Map<String, dynamic>));
+      }
+    }
+    return members;
+  }
+
+  /// Delete a family member.
+  Future<void> deleteFamilyMember(String memberId) async {
+    await _familyMemberBox.delete(memberId);
+  }
+
+  /// Get family members relevant to a specific chapter.
+  /// For 'family' chapter, return all members.
+  /// For 'childhood', return parents and grandparents.
+  /// For 'parenthood', return children and spouse.
+  /// For other chapters, return all members (the AI will
+  /// decide what's relevant).
+  Future<List<FamilyMember>> getFamilyMembersForChapter(
+    LifeChapter chapter
+  ) async {
+    return getAllFamilyMembers();
+  }
+
+  /// Save a photo.
+  Future<void> savePhoto(PhotoMetadata photo) async {
+    await _openBox(_photosBox).put(photo.id, jsonEncode(photo.toJson()));
+  }
+
+  /// Get photos for a specific chapter.
+  Future<List<PhotoMetadata>> getPhotosForChapter(LifeChapter chapter) async {
+    final photos = <PhotoMetadata>[];
+    for (final key in _openBox(_photosBox).keys) {
+      final json = _openBox(_photosBox).get(key);
+      if (json != null) {
+        try {
+          final photo = PhotoMetadata.fromJson(
+            jsonDecode(json) as Map<String, dynamic>);
+          if (photo.chapter == chapter) {
+            photos.add(photo);
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    return photos;
+  }
+
+  /// Delete a photo by ID.
+  Future<void> deletePhoto(String photoId) async {
+    await _openBox(_photosBox).delete(photoId);
+  }
+
+  /// Save a session
+  Future<void> saveSession(InterviewSession session) async {
+    debugPrint('STORAGE DEBUG: Saving session ${session.id} with ${session.messages.length} messages');
+    await _openBox(_sessionsBox).put(session.id, jsonEncode(session.toJson()));
   }
 
   /// Get a session by ID
-  Future<IntakeSession?> getSession(String sessionId) async {
-    final json = _knowledgeBoxInstance.get(sessionId);
-    if (json != null) {
-      return IntakeSession.fromJson(
-        jsonDecode(json) as Map<String, dynamic>,
-      );
+  Future<InterviewSession?> getSession(String sessionId) async {
+    final data = _openBox(_sessionsBox).get(sessionId);
+    if (data is String) {
+      try {
+        return InterviewSession.fromJson(
+          jsonDecode(data) as Map<String, dynamic>,
+        );
+      } catch (e) {
+        return null;
+      }
     }
     return null;
   }
 
-  /// Get all sessions
-  Future<List<IntakeSession>> getAllSessions() async {
-    final sessions = <IntakeSession>[];
-    for (final key in _knowledgeBoxInstance.keys) {
-      final json = _knowledgeBoxInstance.get(key);
-      if (json != null) {
+  /// Get all sessions for a specific chapter
+  Future<List<InterviewSession>> getSessionsForChapter(
+    LifeChapter chapter,
+  ) async {
+    final sessions = <InterviewSession>[];
+    for (final key in _openBox(_sessionsBox).keys) {
+      final sessionStr = _openBox(_sessionsBox).get(key);
+      if (sessionStr != null) {
         try {
-          sessions.add(IntakeSession.fromJson(
-            jsonDecode(json) as Map<String, dynamic>,
-          ));
+          final session = InterviewSession.fromJson(
+            jsonDecode(sessionStr) as Map<String, dynamic>,
+          );
+          if (session.chapter == chapter) {
+            sessions.add(session);
+          }
         } catch (e) {
-          debugPrint('Failed to parse session $key: $e');
+          continue;
         }
       }
     }
-    sessions.sort((a, b) => b.startedAt.compareTo(a.startedAt));
     return sessions;
   }
 
-  /// Get sessions for a specific phase
-  Future<List<IntakeSession>> getSessionsForPhase(IntakePhase phase) async {
-    final allSessions = await getAllSessions();
-    return allSessions.where((s) => s.phase == phase).toList();
-  }
+  /// Get the most recent active session (not completed)
+  Future<InterviewSession?> getActiveSession() async {
+    InterviewSession? activeSession;
+    DateTime? mostRecent;
 
-  /// Get completed sessions
-  Future<List<IntakeSession>> getCompletedSessions() async {
-    final allSessions = await getAllSessions();
-    return allSessions.where((s) => s.isComplete).toList();
-  }
-/// Save artifact metadata (knowledge)
-  Future<void> saveArtifactMetadata(ArtifactMetadata artifact) async {
-    await _knowledgeBoxInstance.put(
-      'artifact_${artifact.id}',
-      jsonEncode(artifact.toJson()),
-    );
-  }
-
-  /// Get artifact metadata by ID
-  Future<ArtifactMetadata?> getArtifactMetadata(String artifactId) async {
-    final json = _knowledgeBoxInstance.get('artifact_$artifactId');
-    if (json != null) {
-      return ArtifactMetadata.fromJson(
-        jsonDecode(json) as Map<String, dynamic>,
-      );
-    }
-    return null;
-  }
-
-  /// Get all artifact metadata
-  Future<List<ArtifactMetadata>> getAllArtifactMetadata() async {
-    final artifacts = <ArtifactMetadata>[];
-    for (final key in _knowledgeBoxInstance.keys) {
-      if (key.startsWith('artifact_')) {
-        final json = _knowledgeBoxInstance.get(key);
-        if (json != null) {
-          try {
-            artifacts.add(ArtifactMetadata.fromJson(
-              jsonDecode(json) as Map<String, dynamic>,
-            ));
-          } catch (e) {
-            debugPrint('Failed to parse artifact $key: $e');
+    for (final key in _openBox(_sessionsBox).keys) {
+      final sessionStr = _openBox(_sessionsBox).get(key);
+      if (sessionStr != null) {
+        try {
+          final session = InterviewSession.fromJson(
+            jsonDecode(sessionStr) as Map<String, dynamic>,
+          );
+          if (!session.isComplete) {
+            if (mostRecent == null || session.startedAt.isAfter(mostRecent)) {
+              activeSession = session;
+              mostRecent = session.startedAt;
+            }
           }
+        } catch (e) {
+          continue;
         }
       }
     }
-    artifacts.sort((a, b) => b.addedAt.compareTo(a.addedAt));
-    return artifacts;
+    return activeSession;
   }
 
-  /// Save PKC interview evidence (knowledge - pending submission)
-  Future<void> savePkcEvidence(String sessionId, PKCInterviewEvidence evidence) async {
-    await _knowledgeBoxInstance.put(
-      'pkc_evidence_$sessionId',
-      jsonEncode(evidence.toJson()),
-    );
+  /// Get summaries of all sessions
+  Future<List<Map<String, dynamic>>> getSessionSummaries() async {
+    final summaries = <Map<String, dynamic>>[];
+
+    for (final key in _openBox(_sessionsBox).keys) {
+      final sessionStr = _openBox(_sessionsBox).get(key);
+      if (sessionStr != null) {
+        try {
+          final session = InterviewSession.fromJson(
+            jsonDecode(sessionStr) as Map<String, dynamic>,
+          );
+          summaries.add({
+            'id': session.id,
+            'chapter': session.chapter,
+            'startedAt': session.startedAt,
+            'endedAt': session.endedAt,
+            'messageCount': session.messages.length,
+            'answerCount': session.answerCount,
+            'isComplete': session.isComplete,
+            'summary': session.summary,
+          });
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+
+    return summaries;
   }
 
-  /// Get PKC interview evidence
-  Future<PKCInterviewEvidence?> getPkcEvidence(String sessionId) async {
-    final json = _knowledgeBoxInstance.get('pkc_evidence_$sessionId');
-    if (json != null) {
-      return PKCInterviewEvidence.fromJson(
-        jsonDecode(json) as Map<String, dynamic>,
-      );
+  /// Get metadata for a chapter
+  Future<ChapterMetadata?> getChapterMetadata(LifeChapter chapter) async {
+    final key = chapter.toString();
+    final data = _openBox(_chaptersBox).get(key);
+
+    if (data is String) {
+      try {
+        return ChapterMetadata.fromJson(
+          jsonDecode(data) as Map<String, dynamic>,
+        );
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Return default metadata if not found
+    return ChapterMetadata.fromChapter(chapter);
+  }
+
+  /// Save metadata for a chapter
+  Future<void> saveChapterMetadata(ChapterMetadata metadata) async {
+    final key = metadata.chapter.toString();
+    await _openBox(_chaptersBox).put(key, jsonEncode(metadata.toJson()));
+  }
+
+  /// Get all chapter metadata
+  Future<List<ChapterMetadata>> getAllChapterMetadata() async {
+    final chapters = <ChapterMetadata>[];
+
+    for (final chapter in ChapterCatalog.chapters) {
+      final metadata = await getChapterMetadata(chapter);
+      if (metadata != null) {
+        chapters.add(metadata);
+      }
+    }
+
+    // Sort by sort order
+    chapters.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return chapters;
+  }
+
+  /// Clear interview content but keep onboarding profile.
+  Future<void> clearAll() async {
+    await _openBox(_sessionsBox).clear();
+    await _openBox(_chaptersBox).clear();
+    await _openBox(_familyBox).clear();
+    await _openBox(_photosBox).clear();
+    await _openBox(_narrativesBox).clear();
+    await _openBox(_bookConfigBox).clear();
+  }
+
+  /// Return to a genuine first-run state, including profile and photo files.
+  Future<void> resetAllData() async {
+    await _deleteStoredPhotoFiles();
+    await _openBox(_sessionsBox).clear();
+    await _openBox(_chaptersBox).clear();
+    await _openBox(_familyBox).clear();
+    await _openBox(_photosBox).clear();
+    await _openBox(_narrativesBox).clear();
+    await _openBox(_bookConfigBox).clear();
+    await _openBox(_profileBox).clear();
+    debugPrint('ALL DATA RESET');
+  }
+
+  Future<void> _deleteStoredPhotoFiles() async {
+    final photosBox = _openBox(_photosBox);
+    for (final key in photosBox.keys.toList()) {
+      final json = photosBox.get(key);
+      if (json == null) {
+        continue;
+      }
+      try {
+        final photo = PhotoMetadata.fromJson(
+          jsonDecode(json) as Map<String, dynamic>,
+        );
+        final file = File(photo.filePath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+  }
+
+  /// Save a generated narrative for a chapter.
+  ///
+  /// `sourceSignature` ties the cached narrative to the exact session content
+  /// used to generate it. This prevents stale preview/PDF content from leaking
+  /// when interview data changes.
+  Future<void> saveNarrative(
+    LifeChapter chapter,
+    String narrative, {
+    String? sourceSignature,
+  }) async {
+    if (sourceSignature == null || sourceSignature.isEmpty) {
+      await _openBox(_narrativesBox).put(chapter.name, narrative);
+      return;
+    }
+    final payload = jsonEncode({
+      'version': 2,
+      'narrative': narrative,
+      'sourceSignature': sourceSignature,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+    await _openBox(_narrativesBox).put(chapter.name, payload);
+  }
+
+  /// Get cached narrative for a chapter (null if not found or empty).
+  ///
+  /// Backward-compatible with legacy plain-string entries.
+  Future<String?> getNarrative(LifeChapter chapter) async {
+    final value = _openBox(_narrativesBox).get(chapter.name);
+    if (value == null || value.isEmpty) return null;
+    if (value is! String) return null;
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) {
+        final narrative = decoded['narrative'];
+        if (narrative is String && narrative.isNotEmpty) {
+          return narrative;
+        }
+      }
+    } catch (_) {
+      // Legacy plain-string narrative.
+    }
+    return value;
+  }
+
+  /// Read the source signature saved with a cached narrative.
+  ///
+  /// Returns null for legacy entries that predate signature tracking.
+  Future<String?> getNarrativeSourceSignature(LifeChapter chapter) async {
+    final value = _openBox(_narrativesBox).get(chapter.name);
+    if (value == null || value is! String || value.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) {
+        final signature = decoded['sourceSignature'];
+        if (signature is String && signature.isNotEmpty) {
+          return signature;
+        }
+      }
+    } catch (_) {
+      // Legacy plain-string narrative.
     }
     return null;
+  }
+
+  /// Save book configuration JSON
+  Future<void> saveBookConfig(String configJson) async {
+    await _openBox(_bookConfigBox).put('config', configJson);
+  }
+
+  /// Get saved book configuration JSON (null if not found)
+  Future<String?> getBookConfig() async {
+    return _openBox(_bookConfigBox).get('config');
   }
 
   /// Delete a session by ID
   Future<void> deleteSession(String sessionId) async {
-    await _knowledgeBoxInstance.delete(sessionId);
+    await _openBox(_sessionsBox).delete(sessionId);
     debugPrint('STORAGE DEBUG: Deleted session $sessionId');
   }
 
-  // ============ UI STATE BOX (ephemeral, local only) ============
-
-  /// Save UI state value
-  Future<void> saveUiState(String key, String value) async {
-    await _uiStateBoxInstance.put(key, value);
-  }
-
-  /// Get UI state value
-  String? getUiState(String key) {
-    return _uiStateBoxInstance.get(key);
-  }
-
-  /// Delete UI state value
-  Future<void> deleteUiState(String key) async {
-    await _uiStateBoxInstance.delete(key);
-  }
-
-  /// Clear all UI state (called on uninstall or session reset)
-  Future<void> clearUiState() async {
-    await _uiStateBoxInstance.clear();
-  }
-
-  /// Save user profile (knowledge - goes to knowledge box)
+  /// Save user profile
   Future<void> saveUserProfile({
     required String firstName,
     String? middleName,
@@ -173,36 +383,46 @@ class SessionStorage {
     required String preferredName,
     DateTime? dateOfBirth,
   }) async {
-    await _knowledgeBoxInstance.put('profile_firstName', firstName);
+    final box = Hive.box<String>(_profileBox);
+    await box.put('firstName', firstName);
     if (middleName != null && middleName.isNotEmpty) {
-      await _knowledgeBoxInstance.put('profile_middleName', middleName);
+      await box.put('middleName', middleName);
     }
-    await _knowledgeBoxInstance.put('profile_lastName', lastName);
-    await _knowledgeBoxInstance.put('profile_preferredName', preferredName);
+    await box.put('lastName', lastName);
+    await box.put('preferredName', preferredName);
     if (dateOfBirth != null) {
-      await _knowledgeBoxInstance.put('profile_dateOfBirth', dateOfBirth.toIso8601String());
+      await box.put('dateOfBirth', dateOfBirth.toIso8601String());
     }
   }
 
   /// Get user's preferred name
   Future<String?> getUserName() async {
-    return _knowledgeBoxInstance.get('profile_preferredName');
+    final box = Hive.box<String>(_profileBox);
+    return box.get('preferredName');
   }
 
   /// Get user's full name
   Future<String> getFullName() async {
-    final first = _knowledgeBoxInstance.get('profile_firstName') ?? '';
-    final middle = _knowledgeBoxInstance.get('profile_middleName') ?? '';
-    final last = _knowledgeBoxInstance.get('profile_lastName') ?? '';
+    final box = Hive.box<String>(_profileBox);
+    final first = box.get('firstName') ?? '';
+    final middle = box.get('middleName') ?? '';
+    final last = box.get('lastName') ?? '';
     if (middle.isNotEmpty) {
       return '$first $middle $last';
     }
     return '$first $last';
   }
 
+  /// Get user's formal name
+  Future<String> getFormalName() async {
+    return await getFullName();
+  }
+
   /// Check if onboarding is complete
   Future<bool> hasCompletedOnboarding() async {
-    final preferredName = _knowledgeBoxInstance.get('profile_preferredName');
+    final box = Hive.box<String>(_profileBox);
+    final preferredName = box.get('preferredName');
+    debugPrint('ONBOARDING CHECK: preferredName in box = "$preferredName"');
     return preferredName != null && preferredName.isNotEmpty;
   }
 
@@ -211,26 +431,24 @@ class SessionStorage {
     String userName,
     ContextCompressor compressor,
   ) async {
-    for (final key in _knowledgeBoxInstance.keys.toList()) {
-      if (!key.startsWith('artifact_') && !key.startsWith('pkc_evidence_') && !key.startsWith('profile_')) {
-        final sessionStr = _knowledgeBoxInstance.get(key);
-        if (sessionStr != null) {
-          try {
-            final session = IntakeSession.fromJson(
-              jsonDecode(sessionStr) as Map<String, dynamic>);
-            if (session.isComplete &&
-                session.summary != null &&
-                session.messages.length > 1 &&
-                !session.summary!.contains(userName)) {
-              debugPrint('Regenerating summary for ${session.id}');
-              final newSummary = await compressor.summarizeSession(
-                messages: session.messages);
-              final updated = session.copyWith(summary: newSummary);
-              await _knowledgeBoxInstance.put(key, jsonEncode(updated.toJson()));
-            }
-          } catch (e) {
-            continue;
+    for (final key in _openBox(_sessionsBox).keys.toList()) {
+      final sessionStr = _openBox(_sessionsBox).get(key);
+      if (sessionStr != null) {
+        try {
+          final session = InterviewSession.fromJson(
+            jsonDecode(sessionStr) as Map<String, dynamic>);
+          if (session.isComplete &&
+              session.summary != null &&
+              session.messages.length > 1 &&
+              !session.summary!.contains(userName)) {
+            debugPrint('Regenerating summary for ${session.id}');
+            final newSummary = await compressor.summarizeSession(
+              messages: session.messages);
+            final updated = session.copyWith(summary: newSummary);
+            await _openBox(_sessionsBox).put(key, jsonEncode(updated.toJson()));
           }
+        } catch (e) {
+          continue;
         }
       }
     }
@@ -238,7 +456,12 @@ class SessionStorage {
 
   /// Close all boxes
   Future<void> close() async {
-    await _knowledgeBoxInstance.close();
-    await _uiStateBoxInstance.close();
+    await _sessionBox.close();
+    await _chapterBox.close();
+    await _familyBoxInstance.close();
+    await _photosBoxInstance.close();
+    await _profileBoxInstance.close();
+    await _narrativesBoxInstance.close();
+    await _bookConfigBoxInstance.close();
   }
 }

@@ -1124,7 +1124,10 @@ engine can ask meaningful questions.
   This extends the existing 5-mode routing in `providers.rs` with a
   load/quality trigger; it must ride the same consent + audit path as every
   other cloud crossing.
-- TTS: the owner uses a cloned voice. Response **compression before speech**
+- TTS: daily voice is a neutral assistant voice — NOT the owner's clone
+  (owner clarification 2026-09-15: "I don't want to talk to myself"). The
+  owner's cloned voice is reserved exclusively for the legacy protocol (A6).
+  Response **compression before speech**
   (1–2 spoken sentences instead of raw payloads) is an adopted pattern; the
   TTS engine itself must be local or consent-gated cloud (never silent).
   Reference blueprint reviewed 2026-09-14 (IndyDevDan-style): its Ears/wake
