@@ -262,8 +262,16 @@ class _BenchScreenState extends State<BenchScreen> {
               _HeaderBar(
                 chapter: _chapter,
                 onChapterChanged: provider.isGenerating
+                    // Explicit non-nullable parameter: the header field is
+                    // ValueChanged<LifeChapter?>? to match DropdownButton's
+                    // onChanged, so an untyped lambda would infer LifeChapter?
+                    // and fail to assign _chapter. The dropdown's value and
+                    // items are always non-null, so onChanged never fires
+                    // with null; a Function(LifeChapter) is assignable to
+                    // Function(LifeChapter?) by contravariance.
                     ? null
-                    : (value) => setState(() => _chapter = value),
+                    : (LifeChapter value) =>
+                        setState(() => _chapter = value),
                 hasSession: session != null,
                 isGenerating: provider.isGenerating,
                 onStart: () =>
