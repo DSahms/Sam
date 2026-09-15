@@ -324,7 +324,6 @@ class SessionStorage {
   Future<String?> getNarrative(LifeChapter chapter) async {
     final value = _openBox(_narrativesBox).get(chapter.name);
     if (value == null || value.isEmpty) return null;
-    if (value is! String) return null;
     try {
       final decoded = jsonDecode(value);
       if (decoded is Map<String, dynamic>) {
@@ -344,7 +343,7 @@ class SessionStorage {
   /// Returns null for legacy entries that predate signature tracking.
   Future<String?> getNarrativeSourceSignature(LifeChapter chapter) async {
     final value = _openBox(_narrativesBox).get(chapter.name);
-    if (value == null || value is! String || value.isEmpty) return null;
+    if (value == null || value.isEmpty) return null;
     try {
       final decoded = jsonDecode(value);
       if (decoded is Map<String, dynamic>) {

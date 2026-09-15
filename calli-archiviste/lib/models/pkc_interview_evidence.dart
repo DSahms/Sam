@@ -68,6 +68,8 @@ class PKCSourceRelationship {
         type: json['type'] as String? ?? '',
         target: json['target'] as String? ?? '',
       );
+
+  Map<String, Object?> toJson() => {'type': type, 'target': target};
 }
 
 class PKCEvidenceSource {
@@ -104,6 +106,14 @@ class PKCEvidenceSource {
           : const [],
     );
   }
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'title': title,
+    'source_kind': sourceKind,
+    'body_included': bodyIncluded,
+    'relationships': relationships.map((r) => r.toJson()).toList(),
+  };
 }
 
 class PKCInterviewEvidence {
@@ -139,6 +149,64 @@ class PKCInterviewEvidence {
     naturalAnswer,
     conversationalContext,
   ].where((value) => value.isNotEmpty).join('\n');
+
+  /// Storage schema version for the local Hive round-trip in
+  /// IntakeStorage.savePkcEvidence / getPkcEvidence. Pinned per
+  /// docs/migration/calli-source-map.md ("Schema version pinned in
+  /// PKCInterviewEvidence"). Intentionally independent from the PKC bridge
+  /// version: stored evidence must outlive bridge protocol changes.
+  static const int storageSchemaVersion = 1;
+
+  /// Local-storage serialization (stable flat shape, no bridge envelope).
+  Map<String, Object?> toJson() => {
+    'schema_version': storageSchemaVersion,
+    'ok': ok,
+    'available': available,
+    'natural_answer': naturalAnswer,
+    'conversational_context': conversationalContext,
+    'support_status': supportStatus,
+    'source_handles': sourceHandles,
+    'sources': sources.map((s) => s.toJson()).toList(),
+    'withheld': withheld,
+    'safe_reason': safeReason,
+    'authorized': authorized,
+    'canonical_hash_verified': canonicalHashVerified,
+    'protected_content_materialized': protectedContentMaterialized,
+  };
+
+  /// Local-storage deserialization; inverse of [toJson]. Lenient on read
+  /// (missing keys fall back to safe defaults) so older rows keep loading.
+  factory PKCInterviewEvidence.fromJson(Map<String, dynamic> json) {
+    final handles = json['source_handles'];
+    final sources = json['sources'];
+    return PKCInterviewEvidence(
+      ok: json['ok'] as bool? ?? false,
+      available: json['available'] as bool? ?? false,
+      naturalAnswer: json['natural_answer'] as String? ?? '',
+      conversationalContext: json['conversational_context'] as String? ?? '',
+      supportStatus: json['support_status'] as String? ?? 'Unknown',
+      sourceHandles: handles is List
+          ? handles.whereType<String>().toList()
+          : const [],
+      sources: sources is List
+          ? sources
+                .whereType<Map>()
+                .map(
+                  (item) => PKCEvidenceSource.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
+                .toList()
+          : const [],
+      withheld: json['withheld'] as bool? ?? true,
+      safeReason: json['safe_reason'] as String?,
+      authorized: json['authorized'] as bool? ?? false,
+      canonicalHashVerified:
+          json['canonical_hash_verified'] as bool? ?? false,
+      protectedContentMaterialized:
+          json['protected_content_materialized'] as bool? ?? false,
+    );
+  }
 
   factory PKCInterviewEvidence.unavailable(String safeReason) =>
       PKCInterviewEvidence(

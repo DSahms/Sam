@@ -20,6 +20,10 @@ import 'package:calli_archiviste/services/session_storage.dart';
 /// Generates contextual questions and manages the interview session
 class InterviewEngine {
   final LlmService _llm;
+  /// Held for the context-compression wiring stage. The donor engine also
+  /// declared but never called its compressor from the engine itself; tier
+  /// budgeting is consumed here once wired into _buildContext.
+  // ignore: unused_field
   final ContextCompressor _contextCompressor;
   final SessionStorage _storage;
   final PKCInterviewBridge _pkcBridge;
@@ -36,8 +40,11 @@ class InterviewEngine {
   /// later opt-in work via [generatePkcBackedNextQuestion].
   static const bool livePkcQuestionEnrichment = false;
 
-  // Token budget constants
+  // Token budget constants (donor scaffolding, intentionally preserved;
+  // consumed when tier budgeting is wired into _buildContext).
+  // ignore: unused_field
   static const int _maxContextTokens = 1500;
+  // ignore: unused_field
   static const int _tokenBudgetPerTier = 250;
 
   InterviewEngine({
@@ -391,8 +398,6 @@ class InterviewEngine {
       return result.followUp;
     }
 
-    final chapterTitle = ChapterCatalog.title(session.chapter);
-
     // Add name context
     String nameContext = '';
     if (userName.isNotEmpty) {
@@ -638,6 +643,9 @@ class InterviewEngine {
 
   /// Determine if interviewer should probe deeper on current thread
   /// Returns true if conversation should go deeper on current topic
+  // Donor scaffolding, intentionally preserved: gates the follow-up
+  // probing stage in an upcoming wiring pass.
+  // ignore: unused_element
   bool _shouldProbeDeeper(List<Message> recentMessages, int answerCount) {
     // Probe deeper if:
     // 1. Person gave substantive answer (not just facts)

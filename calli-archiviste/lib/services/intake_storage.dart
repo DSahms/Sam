@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calli_archiviste/models/session.dart';
 import 'package:calli_archiviste/models/artifact_metadata.dart';
+import 'package:calli_archiviste/models/intake_phase.dart';
 import 'package:calli_archiviste/models/pkc_interview_evidence.dart';
 import 'package:calli_archiviste/services/context_compressor.dart';
 
@@ -82,7 +83,8 @@ class IntakeStorage {
     final allSessions = await getAllSessions();
     return allSessions.where((s) => s.isComplete).toList();
   }
-/// Save artifact metadata (knowledge)
+
+  /// Save artifact metadata (knowledge)
   Future<void> saveArtifactMetadata(ArtifactMetadata artifact) async {
     await _knowledgeBoxInstance.put(
       'artifact_${artifact.id}',
