@@ -20,10 +20,8 @@ import 'package:calli_archiviste/services/session_storage.dart';
 /// Generates contextual questions and manages the interview session
 class InterviewEngine {
   final LlmService _llm;
-  /// Held for the context-compression wiring stage. The donor engine also
-  /// declared but never called its compressor from the engine itself; tier
-  /// budgeting is consumed here once wired into _buildContext.
-  // ignore: unused_field
+  /// Compresses older in-session messages into the context tier
+  /// (STAGE 3 wiring; the donor declared this field but never called it).
   final ContextCompressor _contextCompressor;
   final SessionStorage _storage;
   final PKCInterviewBridge _pkcBridge;
@@ -40,11 +38,9 @@ class InterviewEngine {
   /// later opt-in work via [generatePkcBackedNextQuestion].
   static const bool livePkcQuestionEnrichment = false;
 
-  // Token budget constants (donor scaffolding, intentionally preserved;
-  // consumed when tier budgeting is wired into _buildContext).
-  // ignore: unused_field
+  // Token budgets from the donor engine (STAGE 3: now enforced in
+  // _buildContext - per-tier cap plus whole-block cap, chars/4 estimator).
   static const int _maxContextTokens = 1500;
-  // ignore: unused_field
   static const int _tokenBudgetPerTier = 250;
 
   InterviewEngine({
@@ -162,6 +158,7 @@ class InterviewEngine {
     }
     var contextBlock = await _buildContext(
       session,
+      recentMessages: recentMessages,
       familyMembers: familyMembers,
       photos: photos,
     );
@@ -279,7 +276,10 @@ class InterviewEngine {
       startedAt: DateTime.now(),
       messages: [],
     );
-    final fullContext = await _buildContext(tempSession);
+    final fullContext = await _buildContext(
+      tempSession,
+      recentMessages: tempSession.messages,
+    );
     contextBlock += fullContext;
 
     // Replace templates in system prompt
@@ -338,6 +338,13 @@ class InterviewEngine {
       return;
     }
 
+    // STAGE 3: probe-deeper listening, same gate as generateNextQuestion.
+    final probeDeeper = _shouldProbeDeeper(recentMessages, session.answerCount);
+    debugPrint(
+      'InterviewEngine: probeDeeper=$probeDeeper (stream) '
+      '(answers=${session.answerCount})',
+    );
+
     // Reuse the same context-building as generateNextQuestion
     String nameContext = '';
     if (userName.isNotEmpty) {
@@ -350,11 +357,13 @@ class InterviewEngine {
 
     var contextBlock = await _buildContext(
       session,
+      recentMessages: recentMessages,
       familyMembers: familyMembers,
       photos: photos,
     );
     contextBlock = nameContext + contextBlock;
-    final systemPrompt = _followUpSystemPrompt + '\n\n' + contextBlock;
+    final systemPrompt = _followUpSystemPrompt + '\n\n' + contextBlock +
+        (probeDeeper ? _probeDeeperInstruction : '');
 
     final apiMessages = recentMessages.map((m) {
       return {
@@ -398,6 +407,15 @@ class InterviewEngine {
       return result.followUp;
     }
 
+    // STAGE 3 (2026-09-15): probe-deeper listening. When the person's last
+    // answer carries emotional weight or real substance, the follow-up
+    // stays on that thread instead of changing the subject.
+    final probeDeeper = _shouldProbeDeeper(recentMessages, session.answerCount);
+    debugPrint(
+      'InterviewEngine: probeDeeper=$probeDeeper '
+      '(answers=${session.answerCount})',
+    );
+
     // Add name context
     String nameContext = '';
     if (userName.isNotEmpty) {
@@ -411,6 +429,7 @@ class InterviewEngine {
     // Build full context for this session
     var contextBlock = await _buildContext(
       session,
+      recentMessages: recentMessages,
       familyMembers: familyMembers,
       photos: photos,
     );
@@ -419,7 +438,8 @@ class InterviewEngine {
     // Build follow-up system prompt with context block included
     // Note: follow_up_system.txt does NOT have {{context_block}} placeholder
     // so we append the context directly to ensure it's in the system prompt
-    final systemPrompt = _followUpSystemPrompt + '\n\n' + contextBlock;
+    final systemPrompt = _followUpSystemPrompt + '\n\n' + contextBlock +
+        (probeDeeper ? _probeDeeperInstruction : '');
 
     // Build message history for API call
     final apiMessages = recentMessages.map((m) {
@@ -567,13 +587,23 @@ class InterviewEngine {
   /// Follows the 6-tier context assembly as specified in architecture
   Future<String> _buildContext(
     InterviewSession session, {
+    required List<Message> recentMessages,
     List<FamilyMember>? familyMembers,
     List<PhotoMetadata>? photos,
   }) async {
     final contextParts = <String>[];
 
-    // TIER 1: Current session so far (already in messages,
-    // no need to summarize - Claude sees the full transcript)
+    // TIER 1: Current session so far (the model sees the recent window in
+    // the API messages; anything older is handled by TIER 1b below)
+
+    // TIER 1b (STAGE 3): older messages of this session, beyond the recent
+    // window, compressed into a summary tier so long interviews keep their
+    // thread without blowing the context budget. The donor engine never
+    // enforced this tier; the compressor existed for exactly this job.
+    final earlierTier = await _buildEarlierContext(session, recentMessages);
+    if (earlierTier.isNotEmpty) {
+      contextParts.add(earlierTier);
+    }
 
     // TIER 2: Prior completed sessions in same chapter
     final priorSessions = await _storage.getSessionsForChapter(session.chapter);
@@ -637,15 +667,88 @@ class InterviewEngine {
       }
     }
 
-    final contextBlock = contextParts.join('\n');
+    // STAGE 3: enforce the donor token budgets - cap every tier, then cap
+    // the whole block by dropping lowest-priority (tail) tiers.
+    final cappedParts = contextParts.map(_capToTokenBudget).toList();
+    var contextBlock = cappedParts.join('\n');
+    while (cappedParts.length > 1 &&
+        _estimateTokens(contextBlock) > _maxContextTokens) {
+      cappedParts.removeLast();
+      contextBlock = cappedParts.join('\n');
+    }
     return contextBlock;
+  }
+
+  /// Minimum count of older messages before compression is worth an LLM
+  /// call. Below this, the recent window plus the existing tiers carry
+  /// enough context.
+  static const int _compressionThreshold = 6;
+
+  /// Appended to the follow-up prompt when [_shouldProbeDeeper] fires, so
+  /// a substantive or emotionally weighted answer gets a deeper follow-up
+  /// on the same thread instead of a topic change.
+  static const String _probeDeeperInstruction =
+      '\n\nThe person\'s last answer carried emotional weight or real '
+      'substance. Do not change the subject. Ask one gentle follow-up that '
+      'goes deeper into what they just shared, at their pace. Do not '
+      'comment on the fact that you are doing this.';
+
+  /// Compress messages older than the recent window into a summary tier.
+  ///
+  /// Returns '' when the session fits inside the recent window or falls
+  /// below the compression threshold - no LLM call is made in those cases.
+  /// Assumes recentMessages is a suffix of session.messages (the provider
+  /// appends messages to the session before asking for the next question);
+  /// mild overlap is harmless if not. summarizeSession never throws - on
+  /// failure it returns a factual placeholder, keeping the tier useful
+  /// without inventing content.
+  Future<String> _buildEarlierContext(
+    InterviewSession session,
+    List<Message> recentMessages,
+  ) async {
+    if (session.messages.length <= recentMessages.length) {
+      return '';
+    }
+    final older = session.messages.sublist(
+      0,
+      session.messages.length - recentMessages.length,
+    );
+    if (older.length < _compressionThreshold) {
+      return '';
+    }
+    debugPrint(
+      'InterviewEngine: compressing ${older.length} older messages '
+      'into the context tier',
+    );
+    final summary = await _contextCompressor.summarizeSession(
+      messages: older,
+      maxTokens: _tokenBudgetPerTier,
+    );
+    if (summary.isEmpty) {
+      return '';
+    }
+    return '## Earlier in this conversation:\n'
+        '${_capToTokenBudget(summary)}\n';
+  }
+
+  /// Rough token estimate (chars/4). The donor budgets are guardrails, not
+  /// exact tokenizer counts; a conservative estimator keeps tiers well
+  /// inside the window on local models.
+  static int _estimateTokens(String text) => (text.length / 4).ceil();
+
+  /// Trim a context tier to the donor per-tier token budget.
+  static String _capToTokenBudget(String text) {
+    final maxChars = _tokenBudgetPerTier * 4;
+    if (text.length <= maxChars) {
+      return text;
+    }
+    return '${text.substring(0, maxChars)}...';
   }
 
   /// Determine if interviewer should probe deeper on current thread
   /// Returns true if conversation should go deeper on current topic
-  // Donor scaffolding, intentionally preserved: gates the follow-up
-  // probing stage in an upcoming wiring pass.
-  // ignore: unused_element
+  /// (STAGE 3: called from generateNextQuestion and the streaming variant;
+  /// gates [_probeDeeperInstruction]).
   bool _shouldProbeDeeper(List<Message> recentMessages, int answerCount) {
     // Probe deeper if:
     // 1. Person gave substantive answer (not just facts)
