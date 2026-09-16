@@ -25,6 +25,38 @@ release exists yet; entries describe verified repository milestones only.
   Working default per design §10: registry contradictions surface at
   harvest only (live in-session surfacing deferred until Dave rules).
 
+### Fixed
+
+- Stage 5-b-3 hotfix: ship `RegistrySessionSink` — the Bench's `main.dart`
+  referenced it but the class itself was never committed. The pure-Dart
+  sandbox harness used its own bridge, so the gap never surfaced there and
+  only appeared as a Windows compile error (`RegistrySessionSink isn't
+  defined`). The bridge now lives in the package as a pass-through
+  (controller -> sink -> registry; no defaults, no swallowed errors), is
+  exported from the barrel, and is pinned by three new `flutter test`
+  checks: full-chain landing writes session + record files with gate_log
+  untouched, re-landing never duplicates records (mint-once), and registry
+  failures propagate instead of vanishing.
+- Bench runtime hotfix: three independent Windows-only failures that made
+  the interview loop on "What was that like?" — (1) `ApiConfig._envModel`
+  called `dotenv.env` unguarded; flutter_dotenv throws
+  `NotInitializedError` when no `.env` was loaded (the Bench never loads
+  one), so every opening/follow-up died BEFORE contacting the local model
+  and the engine's hardcoded fallback answered instead. The getter is now
+  guarded exactly like `_env`: no `.env` means defaults, M40 gets contacted.
+  (2) Prompt assets were loaded under bare keys
+  (`assets/prompts/...`) which never exist inside a compiled app — package
+  assets bundle under `packages/calli_archiviste/...`. All seven load sites
+  (engine x2, compressor, narrative, long-form compiler x3) now use the
+  package-qualified key, so the real Calli persona prompts ship instead of
+  the placeholder fallbacks. (3) The probe-chain tab called the registry
+  factory unguarded in `initState`, so with sqlite missing the whole tab
+  threw `Bad state: registry unavailable` in a widget-build exception
+  storm; the factory call is now wrapped and renders the existing error
+  panel with the reason, while the interview tab keeps working.
+  `sqlite3.dll` (public domain, sqlite.org 3.53.4 x64) ships in the apply
+  bundle and goes beside the Bench's `pubspec.yaml`.
+
 ### Documentation
 
 - Rebuilt the GitHub landing page and professional documentation hierarchy.
@@ -36,6 +68,11 @@ release exists yet; entries describe verified repository milestones only.
 
 ### Validation
 
+- 2026-09-16: 48/48 checks green on Dave's Windows Bench machine
+  (`flutter test` in calli-archiviste) at a0d5e9b — first Windows
+  verification of the 5-b-3 controller suite; the Bench build error found
+  the same day is fixed by the RegistrySessionSink hotfix above (+3
+  checks, 51 total).
 - 2026-09-16: 34/34 checks green on the Linux sandbox harness AND on Dave's
   Windows Bench machine (`flutter test`, sqlite3.dll beside pubspec.yaml) at
   commit bf2bc6f — first full cross-platform verification of Stage 5-b.

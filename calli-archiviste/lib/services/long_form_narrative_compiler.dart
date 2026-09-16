@@ -124,7 +124,7 @@ class LongFormNarrativeCompiler {
     required String userName,
   }) async {
     var prompt = await rootBundle.loadString(
-      'assets/prompts/narrative_chunk_system.txt',
+      'packages/calli_archiviste/assets/prompts/narrative_chunk_system.txt',
     );
     final chapterName = ChapterCatalog.title(chapter);
     prompt = prompt
@@ -156,7 +156,7 @@ class LongFormNarrativeCompiler {
     required int chunkTotal,
   }) async {
     var prompt = await rootBundle.loadString(
-      'assets/prompts/narrative_chunk_system.txt',
+      'packages/calli_archiviste/assets/prompts/narrative_chunk_system.txt',
     );
     final chapterName = ChapterCatalog.title(chapter);
     prompt = prompt
@@ -186,7 +186,7 @@ class LongFormNarrativeCompiler {
     required String userName,
   }) async {
     var prompt = await rootBundle.loadString(
-      'assets/prompts/narrative_assemble_system.txt',
+      'packages/calli_archiviste/assets/prompts/narrative_assemble_system.txt',
     );
     final chapterName = ChapterCatalog.title(chapter);
     final body = StringBuffer();

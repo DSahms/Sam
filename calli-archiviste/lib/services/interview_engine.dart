@@ -68,10 +68,10 @@ class InterviewEngine {
   Future<void> initialize() async {
     try {
       _interviewerSystemPrompt = await rootBundle.loadString(
-        'assets/prompts/interviewer_system.txt',
+        'packages/calli_archiviste/assets/prompts/interviewer_system.txt',
       );
       _followUpSystemPrompt = await rootBundle.loadString(
-        'assets/prompts/follow_up_system.txt',
+        'packages/calli_archiviste/assets/prompts/follow_up_system.txt',
       );
     } catch (e) {
       // DEGRADED-MODE SAFETY NET (2026-09-15): the real donor prompt assets

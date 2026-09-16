@@ -19,7 +19,7 @@ class ContextCompressor {
   Future<void> initialize() async {
     try {
       _summarySystemPrompt =
-          await rootBundle.loadString('assets/prompts/context_summary_system.txt');
+          await rootBundle.loadString('packages/calli_archiviste/assets/prompts/context_summary_system.txt');
     } catch (e) {
       // DEGRADED-MODE SAFETY NET (2026-09-15): the real donor asset now ships
       // in assets/prompts/context_summary_system.txt and is declared in

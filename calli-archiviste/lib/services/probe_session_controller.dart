@@ -136,7 +136,8 @@ class ChainWordingService {
 }
 
 /// Where a landed session goes. The Bench bridges this to
-/// [IntakeRegistry.sessionAppend]; tests use an in-memory fake. Kept as
+/// [IntakeRegistry.sessionAppend] via the shipped [RegistrySessionSink]
+/// (see registry_session_sink.dart); tests use an in-memory fake. Kept as
 /// an interface so the controller has zero sqlite awareness.
 abstract class ChainSessionSink {
   void append({

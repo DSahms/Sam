@@ -66,7 +66,7 @@ class NarrativeService {
     try {
       // Load narrative system prompt from assets
       String systemPrompt = await rootBundle.loadString(
-        'assets/prompts/narrative_system.txt',
+        'packages/calli_archiviste/assets/prompts/narrative_system.txt',
       );
 
       // Replace placeholders

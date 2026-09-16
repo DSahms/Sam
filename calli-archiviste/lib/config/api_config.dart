@@ -103,11 +103,19 @@ class ApiConfig {
       _envModel('VENICE_MODEL') ?? defaultVeniceModel;
 
   static String? _envModel(String key) {
-    final value = dotenv.env[key]?.trim();
-    if (value == null || value.isEmpty) {
+    // Same guard as _env: dotenv.env throws NotInitializedError when no
+    // .env was loaded (the Bench never loads one). Without this guard the
+    // getter throws BEFORE the local model is contacted, and every
+    // follow-up falls back to the static bank ("What was that like?").
+    try {
+      final value = dotenv.env[key]?.trim();
+      if (value == null || value.isEmpty) {
+        return null;
+      }
+      return value;
+    } catch (_) {
       return null;
     }
-    return value;
   }
 
   static const int defaultMaxTokens = 1024;

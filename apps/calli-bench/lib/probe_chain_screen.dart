@@ -37,6 +37,11 @@ class _ProbeChainScreenState extends State<ProbeChainScreen> {
   bool _busy = false;
   bool _landed = false;
 
+  /// Set when [widget.controllerFactory] throws (registry unavailable).
+  /// The error panel below renders this instead of crashing the tab —
+  /// the interview bench keeps working regardless.
+  String? _factoryError;
+
   final TextEditingController _topicController = TextEditingController();
   final TextEditingController _answerController = TextEditingController();
   final TextEditingController _skipReasonController =
@@ -52,7 +57,23 @@ class _ProbeChainScreenState extends State<ProbeChainScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = widget.controllerFactory();
+    _controller = _makeController();
+  }
+
+  /// Calls the factory, converting a throw (registry unavailable) into a
+  /// rendered error panel plus a harmless throwaway controller. Without
+  /// this, initState rethrows and the whole tab crashes.
+  ChainSessionController _makeController() {
+    try {
+      _factoryError = null;
+      return widget.controllerFactory();
+    } catch (e) {
+      _factoryError =
+          'The probe chain could not start: $e\n\n'
+          'The interview bench tab keeps working. For the fix, see the '
+          'console output: the sqlite3.dll placement is printed at startup.';
+      return ChainSessionController(engine: DefaultProbeChainEngine());
+    }
   }
 
   @override
@@ -84,7 +105,8 @@ class _ProbeChainScreenState extends State<ProbeChainScreen> {
       return;
     }
     await _guarded(() async {
-      _controller = widget.controllerFactory();
+      _controller = _makeController();
+      if (_factoryError != null) return;
       _landed = false;
       await _controller.begin(mode: _mode, topic: topic);
     });
@@ -114,7 +136,7 @@ class _ProbeChainScreenState extends State<ProbeChainScreen> {
 
   void _newChain() {
     setState(() {
-      _controller = widget.controllerFactory();
+      _controller = _makeController();
       _landed = false;
       _answerController.clear();
     });
@@ -160,7 +182,7 @@ class _ProbeChainScreenState extends State<ProbeChainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.registryError != null) {
+    if (widget.registryError != null || _factoryError != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Probe chain')),
         body: Center(
@@ -173,7 +195,9 @@ class _ProbeChainScreenState extends State<ProbeChainScreen> {
                 const SizedBox(height: 12),
                 const Text('The intake registry is unavailable.'),
                 const SizedBox(height: 8),
-                SelectableText(widget.registryError!),
+                SelectableText(
+                  widget.registryError ?? _factoryError ?? '',
+                ),
               ],
             ),
           ),

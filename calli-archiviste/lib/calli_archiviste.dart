@@ -32,6 +32,7 @@ export 'services/question_banks.dart';
 // === Stage 5-b-3: Bench session flow (controller + Kobold wording with
 // === persona lock pre-flight; the engine keeps the final say) ===
 export 'services/probe_session_controller.dart';
+export 'services/registry_session_sink.dart';
 
 // === Stage 5-b-2: intake registry (files are truth, sqlite is speed;
 // === write paths are exactly three: session append, gate, rebuild) ===
