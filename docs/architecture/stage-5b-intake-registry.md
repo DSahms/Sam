@@ -1,7 +1,8 @@
 # Stage 5-b Design: Intake Registry + the Leeds Probe Chain
 
 **Status:** Approved design (r1, re-landed 2026-09-16 after environment reset)
-**Slice:** 5-b-1 (pure-Dart engine) — implemented in this commit
+**Slices landed:** 5-b-1 (engine), 5-b-2 (registry), 5-b-3 (session flow:
+controller + wording + Bench chain screen). Remaining: 5-b-4 (gate UI).
 **Upstream spec:** `PKC_LAYOUT_SPEC.md` r2.1 (§5 record superset, §6 tiers, §7 intake contract)
 
 Stage 5-b turns the interview from a chat into a **harvest**: every session walks

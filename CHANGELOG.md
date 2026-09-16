@@ -14,6 +14,16 @@ release exists yet; entries describe verified repository milestones only.
 - Stage 5-b-2: intake registry — files are truth, sqlite is speed; three
   write paths, dave-only gate, gate_log untouchable by rebuild (16 checks);
   PKC_LAYOUT_SPEC r2.1 superset dialect with unknown-field preservation.
+- Stage 5-b-3 (pure-Dart core): probe session controller — model wording in
+  Calli's voice with persona pre-flight (discard -> retry once -> static
+  bank), wording aimed at the level being escalated TO, mint-once landing
+  via a sink interface the Bench bridges to the registry; five-level pips
+  state, harvest preview, and the registry integration landing.
+- Stage 5-b-3 (Bench UI): probe-chain screen — mode + topic chooser, five
+  level pips (filled / struck / hollow), provenance chips (model / retry /
+  bank / re-ask), skip-with-reason, harvest panel noting the gate is 5-b-4.
+  Working default per design §10: registry contradictions surface at
+  harvest only (live in-session surfacing deferred until Dave rules).
 
 ### Documentation
 

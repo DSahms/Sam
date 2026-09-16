@@ -4,6 +4,17 @@ Minimal Windows desktop test bench that runs the **real** Calli Archiviste
 interview engine against a local KoboldCpp server. This is a development
 tool for Stage 5 ("connect Sam") — it is NOT the product UI.
 
+Two tabs:
+
+- **Interview bench** — the Stage 3/4 free-form chapter interview and
+  memoir writing (unchanged).
+- **Probe chain (5-b)** — the Stage 5-b Mother Leeds walk: pick a mode and
+  topic, walk surface -> sensory -> source -> contrast -> meaning, watch
+  the level pips fill, skip out loud when needed, and land the harvest as
+  candidates in the intake registry. Wording is the local model's job
+  (persona-locked, static bank as the floor); approval is nobody's job
+  here — the gate UI is Stage 5-b-4.
+
 ## What it proves
 
 - The extracted engine (interviewer prompts, follow_up prompts) drives a

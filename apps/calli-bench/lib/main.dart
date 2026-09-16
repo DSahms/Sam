@@ -1,11 +1,14 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:calli_archiviste/calli_archiviste.dart';
+
+import 'probe_chain_screen.dart';
 
 /// User name injected into engine, compressor and narrative prompts.
 /// BENCH DEFAULT: persona/naming rules for the product UI come with the
@@ -56,12 +59,34 @@ Future<void> main() async {
     intakeStorage: intakeStorage,
   );
 
+  // Stage 5-b-3: the intake registry lives beside the bench's Hive boxes,
+  // never in the repository. registerSqliteOverride() must run BEFORE the
+  // first open on Windows (it finds sqlite3.dll beside pubspec.yaml); a
+  // failure degrades ONLY the probe-chain tab - the interview bench keeps
+  // working, and the tab explains what to fix instead of crashing the app.
+  IntakeRegistry? registry;
+  String? registryError;
+  try {
+    registerSqliteOverride();
+    registry = IntakeRegistry.open(
+      recordsDir: Directory('${dataDir.path}${Platform.pathSeparator}'
+          '02_records'),
+      registryDir: Directory('${dataDir.path}${Platform.pathSeparator}'
+          '05_registry'),
+    );
+  } catch (e) {
+    registryError = e.toString();
+    debugPrint('intake registry unavailable: $registryError');
+  }
+
   runApp(
     CalliBenchApp(
       provider: provider,
       storage: storage,
       narrative: NarrativeService(llm: llm),
       kobold: llm,
+      registry: registry,
+      registryError: registryError,
     ),
   );
 }
@@ -73,6 +98,8 @@ class CalliBenchApp extends StatelessWidget {
     required this.storage,
     required this.narrative,
     required this.kobold,
+    this.registry,
+    this.registryError,
   });
 
   final InterviewProvider provider;
@@ -80,19 +107,58 @@ class CalliBenchApp extends StatelessWidget {
   final NarrativeService narrative;
   final KoboldLocalService kobold;
 
+  /// Null when the registry failed to open; [registryError] explains why.
+  final IntakeRegistry? registry;
+  final String? registryError;
+
   @override
   Widget build(BuildContext context) {
+    final registry = this.registry;
     return MaterialApp(
       title: 'Calli Bench',
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFF5B7C99),
         useMaterial3: true,
       ),
-      home: BenchScreen(
-        provider: provider,
-        storage: storage,
-        narrative: narrative,
-        kobold: kobold,
+      home: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          body: Column(
+            children: [
+              Material(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: TabBar(
+                  tabs: const [
+                    Tab(text: 'Interview bench'),
+                    Tab(text: 'Probe chain (5-b)'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    BenchScreen(
+                      provider: provider,
+                      storage: storage,
+                      narrative: narrative,
+                      kobold: kobold,
+                    ),
+                    ProbeChainScreen(
+                      controllerFactory: registry == null
+                          ? () => throw StateError('registry unavailable')
+                          : () => ChainSessionController(
+                                engine: DefaultProbeChainEngine(),
+                                wording: ChainWordingService(llm: kobold),
+                                sink: RegistrySessionSink(registry),
+                              ),
+                      registryError: registryError,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
