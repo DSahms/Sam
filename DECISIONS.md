@@ -230,3 +230,41 @@ reversibility, date, and affected files.
 - **Affected:** `src-tauri/src/lock.rs`, `src-tauri/src/lib.rs`.
 
 
+
+## D015 — Registry: JSON files are truth, sqlite is a rebuildable index; gate writes JSON first (Stage 5-b-2)
+- **Decision:** `registry.sqlite` is strictly a rebuildable index over the
+  PKC §5 superset record files; write paths are exactly three (session
+  append, gate, rebuild). Gate actions mutate the decoded record file in
+  place (atomic tmp+rename) and only then run the sqlite transaction
+  (index row + `gate_log` stamp). `gate_log` is the one non-rebuildable
+  table and is never exported; rebuild asserts it is untouched. In the
+  superset dialect, `closed` is `closure.closed/closed_by` in the file and
+  is mirrored in the index as status `closed` (the engine's five-status
+  vocabulary is a projection, files stay four-status + closure block).
+  Engine-minted candidates are projected INTO the superset at append time
+  (provenance block, object sources, uppercase tier); unknown fields in
+  record files are preserved on every in-place mutation.
+- **Reason:** The corpus outlives the app (PKC §1): files survive any
+  sqlite damage, and `rebuild` is the documented recovery. JSON-first gate
+  ordering means a crash can only lose a stamp (re-stampable), never
+  create a stamp contradicted by the file (worse — a stamp is a decision).
+  Logging denied attempts turns gate_log into the complete audit surface
+  the 5-b-4 viewer needs.
+- **Alternatives:** sqlite-first ordering (rejected: orphaned stamps
+  contradict files-as-truth); a `closed` status written into files
+  (rejected: breaks PKC §5 field semantics); adding columns to the §5
+  schema (rejected: design doc is the contract).
+- **Security consequences:** Positive — every gate path re-checks
+  GatePolicy at the registry layer, so a second, independent rejection of
+  any non-`dave` actor exists outside the engine. `gate_log` never leaves
+  the machine (no export path exists in this slice).
+- **Data consequences:** `source_sha256`/`file_mtime` are recomputed from
+  files on every index write, so the index is always derivable. Deleting
+  `registry.sqlite` is recoverable by design; deleting record files is
+  not (they are canonical).
+- **Reversibility:** Medium-high — schema is versioned in `meta`;
+  migrations for future slices follow the same rebuild path.
+- **Date:** 2026-09-16.
+- **Affected:** `calli-archiviste/lib/services/intake_registry.dart`,
+  `calli-archiviste/test/intake_registry_test.dart`,
+  `calli-archiviste/pubspec.yaml`, `calli-archiviste/lib/calli_archiviste.dart`.

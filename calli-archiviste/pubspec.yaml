@@ -23,6 +23,10 @@ dependencies:
   image_picker: ^1.0.0
   path: ^1.8.0
 
+  # Stage 5-b-2: intake registry (sqlite index over canonical JSON files)
+  sqlite3: ^2.4.0
+  crypto: ^3.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

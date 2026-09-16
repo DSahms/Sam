@@ -29,6 +29,10 @@ export 'models/record_candidate.dart';
 export 'services/probe_chain_engine.dart';
 export 'services/question_banks.dart';
 
+// === Stage 5-b-2: intake registry (files are truth, sqlite is speed;
+// === write paths are exactly three: session append, gate, rebuild) ===
+export 'services/intake_registry.dart';
+
 // === Artifact intake scaffold (Calli-native, pre-donor integration) ===
 export 'services/intake_storage.dart';
 export 'services/media_service.dart';
