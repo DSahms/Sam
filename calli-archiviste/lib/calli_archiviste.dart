@@ -23,6 +23,12 @@ export 'models/chapter.dart';
 export 'models/pkc_interview_evidence.dart';
 export 'providers/interview_provider.dart';
 
+// === Stage 5-b: Leeds probe chain (pure Dart; engine owns state, model
+// === owns wording, Dave owns approval) ===
+export 'models/record_candidate.dart';
+export 'services/probe_chain_engine.dart';
+export 'services/question_banks.dart';
+
 // === Artifact intake scaffold (Calli-native, pre-donor integration) ===
 export 'services/intake_storage.dart';
 export 'services/media_service.dart';
