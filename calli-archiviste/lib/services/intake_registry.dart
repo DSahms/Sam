@@ -352,7 +352,7 @@ class IntakeRegistry {
       );
     }
     final relPath = row.first['json_path'] as String;
-    final file = File('${recordsDir.path}/$relPath');
+    final file = _resolveRecordFile(relPath);
     final doc = _readJsonMapOrNull(file);
     if (doc == null) {
       throw StateError(
@@ -534,7 +534,7 @@ class IntakeRegistry {
     );
     if (row.isEmpty) return null;
     return _readJsonMapOrNull(
-      File('${recordsDir.path}/${row.first['json_path']}'),
+      _resolveRecordFile(row.first['json_path'] as String),
     );
   }
 
@@ -837,12 +837,34 @@ class IntakeRegistry {
   }
 
   String _relativeToRecords(File file) {
-    final root = recordsDir.path;
-    var path = file.path;
-    if (path.startsWith('$root/')) {
-      path = path.substring(root.length + 1);
+    // Normalize BOTH sides to forward slashes BEFORE the prefix match.
+    // Windows: recordsDir.path may arrive with '/' (caller-built) while
+    // Directory.listSync() returns '\' paths — a raw startsWith then fails
+    // silently and the FULL path gets stored as json_path, which gate()
+    // and readRecord() cannot resolve (first Windows run, 2026-09-16).
+    var root = recordsDir.path.replaceAll('\\', '/');
+    while (root.endsWith('/')) {
+      root = root.substring(0, root.length - 1);
     }
-    return path.replaceAll('\\', '/');
+    final path = file.path.replaceAll('\\', '/');
+    if (path.startsWith('$root/')) {
+      return path.substring(root.length + 1);
+    }
+    return path;
+  }
+
+  /// Resolves an indexed `json_path` against [recordsDir]. Indexes written
+  /// before the separator fix may hold absolute paths; those are used
+  /// verbatim (the next rebuild rewrites them as clean relative paths),
+  /// so a stale index degrades to readable instead of broken.
+  File _resolveRecordFile(String stored) {
+    final normalized = stored.replaceAll('\\', '/');
+    final looksAbsolute = normalized.startsWith('/') ||
+        RegExp(r'^[A-Za-z]:/').hasMatch(normalized);
+    if (looksAbsolute) return File(normalized);
+    final root =
+        recordsDir.path.replaceAll('\\', '/').replaceFirst(RegExp(r'/+$'), '');
+    return File('$root/$normalized');
   }
 
   Map<String, Object?>? _readJsonMapOrNull(File file) {
