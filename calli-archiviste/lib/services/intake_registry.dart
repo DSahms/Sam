@@ -975,21 +975,87 @@ class RegistrySearchHit {
 
 /// Native library bootstrap for hosts where the sqlite3 package's default
 /// loader name is not on the path (Ubuntu ships `libsqlite3.so.0`; a
-/// Windows Bench machine may only have `sqlite3.dll` beside the test
-/// runner). Call once from the app or test bootstrap BEFORE opening a
-/// registry. Idempotent; the final fallback defers to the package default
-/// so its diagnostic surfaces when nothing matches.
+/// Windows Bench machine may have no sqlite3 anywhere findable at all).
+/// Call once from the app or test bootstrap BEFORE opening a registry.
+/// Idempotent.
+///
+/// Search order, first hit wins:
+///   1. the `SAM_SQLITE3_PATH` environment variable (absolute path — the
+///      Bench app and power users can pin an exact dll/so);
+///   2. the bare platform name (`sqlite3.dll` on Windows, `libsqlite3.so.0`
+///      on Linux, `libsqlite3.dylib` on macOS) — covers system dirs, PATH,
+///      and the dynamic loader's own search;
+///   3. the same names beside the current directory and inside `test/`
+///      ("drop the dll next to pubspec.yaml" just works for flutter test);
+///   4. the other platforms' bare names (cross-platform tolerance).
+///
+/// If nothing loads, throws an [ArgumentError] listing every candidate
+/// tried plus the exact fix — a bare "error 126" with a Linux name on a
+/// Windows machine (the 5-b-2 first Windows run, 2026-09-16) is not an
+/// acceptable diagnostic for Dave.
 void registerSqliteOverride() {
   sqlite_open.open.overrideForAll(() {
-    try {
-      return DynamicLibrary.open('sqlite3.dll');
-    } catch (_) {}
-    try {
-      return DynamicLibrary.open('libsqlite3.so.0');
-    } catch (_) {}
-    try {
-      return DynamicLibrary.open('libsqlite3.dylib');
-    } catch (_) {}
-    return DynamicLibrary.open('libsqlite3.so');
+    final tried = <String>[];
+
+    String? pinned = Platform.environment['SAM_SQLITE3_PATH'];
+    if (pinned != null && pinned.trim().isNotEmpty) {
+      pinned = pinned.trim();
+      tried.add(pinned);
+      try {
+        return DynamicLibrary.open(pinned);
+      } catch (_) {}
+    }
+
+    final String primary;
+    if (Platform.isWindows) {
+      primary = 'sqlite3.dll';
+    } else if (Platform.isMacOS) {
+      primary = 'libsqlite3.dylib';
+    } else {
+      primary = 'libsqlite3.so.0';
+    }
+    final names = <String>{
+      primary,
+      'libsqlite3.so.0',
+      'libsqlite3.so',
+      'libsqlite3.dylib',
+      'sqlite3.dll',
+    }.toList();
+
+    final sep = Platform.isWindows ? r'\' : '/';
+    final cwd = Directory.current.path;
+    for (final name in names) {
+      // (a) bare name: system dirs, PATH, loader defaults.
+      tried.add(name);
+      try {
+        return DynamicLibrary.open(name);
+      } catch (_) {}
+      // (b) beside the current directory (next to pubspec.yaml).
+      final beside = '$cwd$sep$name';
+      tried.add(beside);
+      try {
+        return DynamicLibrary.open(beside);
+      } catch (_) {}
+      // (c) inside test/ (flutter test from the package root).
+      final inTest = '$cwd${sep}test$sep$name';
+      tried.add(inTest);
+      try {
+        return DynamicLibrary.open(inTest);
+      } catch (_) {}
+    }
+
+    throw ArgumentError(
+      'Could not load the SQLite native library. Tried:\n'
+      '  ${tried.join('\n  ')}\n'
+      '\n'
+      'Fix (Windows): download "sqlite-dll-win-x64-*.zip" from '
+      'https://www.sqlite.org/download.html, unzip it, and copy '
+      'sqlite3.dll into the calli-archiviste package folder (next to '
+      'pubspec.yaml) or anywhere on PATH.\n'
+      'Fix (Linux): install libsqlite3 (e.g. sudo apt install '
+      'libsqlite3-dev) or place libsqlite3.so.0 on the loader path.\n'
+      'Alternative: set the SAM_SQLITE3_PATH environment variable to the '
+      'full path of the library file and re-run.',
+    );
   });
 }

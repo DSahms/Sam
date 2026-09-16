@@ -14,9 +14,11 @@
 ///     (PKC_LAYOUT_SPEC §5).
 ///
 /// Windows note: `flutter test` needs a loadable sqlite3 DLL. The
-/// `registerSqliteOverride()` call below tries `sqlite3.dll` beside the
-/// runner before the default names. If nothing loads, download the
-/// sqlite.org DLL and put it on PATH (see docs/DEVELOPMENT_RUNBOOK.md).
+/// `registerSqliteOverride()` call below searches `SAM_SQLITE3_PATH`, the
+/// bare system/PATH names, and the package + `test/` folders. If nothing
+/// loads, download the sqlite.org "sqlite-dll-win-x64" zip and drop
+/// `sqlite3.dll` next to `pubspec.yaml`; the failure message lists every
+/// path it tried.
 library;
 
 import 'dart:convert';
